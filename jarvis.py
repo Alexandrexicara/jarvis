@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-🧠 JARVIS — VERSÃO WEB FUNCIONANDO NO RENDER!
-Acessa pelo navegador, não precisa digitar no terminal!
+🧠 JARVIS — SEU INTERFACE É A TELA PRINCIPAL!
 """
 import os
-import subprocess
-from datetime import datetime
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 RAIZ = os.path.abspath(".")
@@ -14,7 +11,6 @@ PASTA_PROJETOS = os.path.join(RAIZ, "projetos")
 PASTA_ATUAL = ""
 
 os.makedirs(PASTA_PROJETOS, exist_ok=True)
-os.makedirs("logs", exist_ok=True)
 
 def escolher_projeto(nome):
     global PASTA_ATUAL
@@ -119,75 +115,24 @@ btn.onclick=()=>{
 </html>"""
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(codigo)
-    return "✅ Jogo criado! Acesse na pasta do projeto!"
+    return "✅ Jogo criado!"
 
 def listar():
     if not PASTA_ATUAL:
         return "❌ Primeiro crie um projeto"
     return "📋 Arquivos:\n" + "\n".join(f"  - {i}" for i in sorted(os.listdir(PASTA_ATUAL)))
 
+# ✅ A TELA PRINCIPAL É O SEU interface.html!
 @app.route('/')
 def home():
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>🧠 JARVIS + AGENTE</title>
-<style>
-body{font-family:Segoe UI,sans-serif;background:#0a0a0a;color:#fff;padding:20px;max-width:800px;margin:0 auto;}
-h1{color:#ff6a00;text-align:center;}
-.terminal{background:#111;border:2px solid #39ff14;border-radius:10px;padding:20px;margin:20px 0;}
-#entrada{width:70%;padding:12px;font-size:18px;background:#222;border:1px solid #39ff14;color:#fff;border-radius:5px;}
-#btn{padding:12px 25px;font-size:18px;background:#39ff14;color:#000;border:none;border-radius:5px;cursor:pointer;font-weight:bold;}
-#btn:hover{transform:scale(1.05);}
-#saida{margin-top:20px;padding:15px;background:#1a1a1a;border-radius:5px;min-height:100px;white-space:pre-wrap;font-family:monospace;}
-.exemplos{margin-top:30px;padding:15px;background:#1a1a1a;border-radius:5px;}
-.exemplo{padding:8px 12px;margin:5px 0;background:#222;border-radius:5px;cursor:pointer;}
-.exemplo:hover{background:#333;}
-</style>
-</head>
-<body>
-<h1>🧠 JARVIS + AGENTE — ONLINE!</h1>
-<div class="terminal">
-  <h3>Digite o que quer fazer:</h3>
-  <input type="text" id="entrada" placeholder="Ex: Cria um projeto chamado cassino">
-  <button id="btn">ENVIAR</button>
-  <div id="saida">✅ Conectado! Digite seu pedido acima ↗</div>
-</div>
-<div class="exemplos">
-  <h3>📋 Clique em um exemplo:</h3>
-  <div class="exemplo" onclick="document.getElementById('entrada').value=this.textContent">Cria um projeto chamado cassino</div>
-  <div class="exemplo" onclick="document.getElementById('entrada').value=this.textContent">Faz o jogo da parede da sorte</div>
-  <div class="exemplo" onclick="document.getElementById('entrada').value=this.textContent">Lista os arquivos</div>
-</div>
-<script>
-async function enviar(){
-  const txt=document.getElementById('entrada').value;
-  if(!txt.trim()) return;
-  document.getElementById('saida').textContent='🔄 Processando...';
-  const res=await fetch('/comando',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({fala:txt})
-  });
-  const d=await res.json();
-  document.getElementById('saida').textContent=d.resposta;
-}
-document.getElementById('btn').onclick=enviar;
-document.getElementById('entrada').onkeydown=e=>e.key==='Enter'&&enviar();
-</script>
-</body>
-</html>
-    ''')
+    return send_from_directory(RAIZ, 'interface.html')
 
 @app.route('/comando', methods=['POST'])
 def comando():
     dados = request.json
     fala = dados.get('fala', '').strip()
     f = fala.lower()
-    resposta = "🤖 Não entendi. Tente: 'Cria um projeto chamado cassino'"
+    resposta = "🤖 Não entendi"
     
     if "projeto" in f or "chamado" in f:
         for p in ["projeto", "chamado", "cria", "criar"]:
