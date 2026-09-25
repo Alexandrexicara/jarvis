@@ -1,0 +1,14 @@
+AGENTE DE CÓDIGO — JARVIS
+COMO USAR:
+1. Dê 2 cliques em INICIAR-AGENTE.bat
+2. Ou digite: python agente_codigo.py
+FUNÇÕES:
+1 - Escolher projeto
+2 - Criar pasta
+3 - Criar arquivo
+4 - Alterar arquivo
+5 - Ler arquivo
+6 - Excluir
+7 - Listar
+8 - Executar comando
+9 - Abrir VS Code
