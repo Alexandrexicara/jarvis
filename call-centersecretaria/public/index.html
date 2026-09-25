@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi Bot IA - Gerenciador</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: linear-gradient(145deg, rgba(30, 30, 50, 0.9), rgba(20, 20, 35, 0.95));
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 3px solid #00ff41;
+            padding: 40px;
+            box-shadow: 
+                0 25px 50px rgba(0, 0, 0, 0.5),
+                0 0 30px rgba(0, 255, 65, 0.4),
+                0 0 60px rgba(0, 255, 65, 0.2);
+            position: relative;
+            animation: borderPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes borderPulse {
+            0%, 100% {
+                border-color: #00ff41;
+                box-shadow: 
+                    0 25px 50px rgba(0, 0, 0, 0.5),
+                    0 0 20px rgba(0, 255, 65, 0.3),
+                    0 0 40px rgba(0, 255, 65, 0.2);
+            }
+            50% {
+                border-color: #00ff88;
+                box-shadow: 
+                    0 25px 50px rgba(0, 0, 0, 0.5),
+                    0 0 40px rgba(0, 255, 65, 0.5),
+                    0 0 80px rgba(0, 255, 65, 0.3);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            background: linear-gradient(90deg, #ffd700, #ffb700, #ffd700);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: shine 3s linear infinite;
+        }
+
+        @keyframes shine {
+            to {
+                background-position: 200% center;
+            }
+        }
+
+        .header p {
+            color: #888;
+            margin-top: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+            transition: all 0.3s ease;
+        }
+
+        .status-indicator.running {
+            background: #00ff88;
+            box-shadow: 0 0 20px #00ff88;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .status-indicator.stopped {
+            background: #ff4444;
+        }
+
+        .status-indicator.error {
+            background: #ff8800;
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 0.9rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #00c853, #00e676);
+            color: #000;
+            box-shadow: 0 10px 30px rgba(0, 200, 83, 0.3);
+        }
+
+        .btn-start:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 200, 83, 0.4);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ff1744, #ff4569);
+            color: #fff;
+            box-shadow: 0 10px 30px rgba(255, 23, 68, 0.3);
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 23, 68, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .log-container {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-header h3 {
+            color: #ffd700;
+            font-size: 1.1rem;
+        }
+
+        .log-clear {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #888;
+            padding: 5px 15px;
+            font-size: 0.8rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .log-clear:hover {
+            border-color: #ffd700;
+            color: #ffd700;
+        }
+
+        #log {
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        #log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #log::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        #log::-webkit-scrollbar-thumb {
+            background: rgba(255, 215, 0, 0.3);
+            border-radius: 4px;
+        }
+
+        .log-entry {
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid transparent;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-entry.success { border-left-color: #00ff88; }
+        .log-entry.error { border-left-color: #ff4444; }
+        .log-entry.warning { border-left-color: #ff8800; }
+        .log-entry.info { border-left-color: #ffd700; }
+
+        .timestamp {
+            color: #666;
+            font-size: 0.8rem;
+            margin-right: 10px;
+        }
+
+        .config-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 215, 0, 0.05);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+
+        .config-section h4 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+
+        .url-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 12px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .url-input:focus {
+            border-color: #ffd700;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+        }
+
+        .url-input::placeholder {
+            color: #666;
+        }
+
+        .btn-save {
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #ffd700, #ffb700);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .bots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .bot-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .bot-card:hover {
+            border-color: rgba(255, 215, 0, 0.4);
+        }
+
+        .bot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .bot-id {
+            background: rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .bot-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+        }
+
+        .bot-status.running { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .bot-status.stopped { background: #ff4444; }
+        .bot-status.error { background: #ff8800; }
+
+        .bot-url {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bot-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .bot-controls button {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 0.8rem;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .btn-bot-start {
+            background: linear-gradient(135deg, #00c853, #00e676);
+            color: #000;
+        }
+
+        .btn-bot-stop {
+            background: linear-gradient(135deg, #ff1744, #ff4569);
+            color: #fff;
+        }
+
+        .btn-bot-remove {
+            background: rgba(255, 255, 255, 0.1);
+            color: #888;
+        }
+
+        .btn-bot-remove:hover {
+            background: rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .bots-section {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .bots-section h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .bot-count {
+            background: rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .logs-section {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+        }
+
+        .logs-section h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+        }
+
+        #logs-container {
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-entry {
+            padding: 6px 10px;
+            margin: 3px 0;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid transparent;
+        }
+
+        .log-entry.success { border-left-color: #00ff88; }
+        .log-entry.error { border-left-color: #ff4444; }
+        .log-entry.warning { border-left-color: #ff8800; }
+        .log-entry.info { border-left-color: #ffd700; }
+
+        .log-bot-id {
+            color: #666;
+            font-size: 0.75rem;
+            margin-right: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+
+        .auth-btn {
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .auth-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .auth-btn.active {
+            background: rgba(255, 215, 0, 0.3);
+            border-color: #ffd700;
+            color: #ffd700;
+        }
+
+        .auth-btn.active#btnGoogle {
+            background: rgba(234, 67, 53, 0.3);
+            border-color: #ea4335;
+        }
+
+        .auth-btn.active#btnGithub {
+            background: rgba(51, 51, 51, 0.8);
+            border-color: #333;
+        }
+
+        .auth-btn.active#btnFacebook {
+            background: rgba(24, 119, 242, 0.3);
+            border-color: #1877f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Multi Bot IA - Gerenciador</h1>
+            <p>Gerencie múltiplos bots em diferentes plataformas simultaneamente</p>
+        </div>
+
+        <div class="config-section">
+            <h4>➕ Adicionar Nova Plataforma</h4>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="text" id="newBotUrl" class="url-input" placeholder="https://plataforma-exemplo.com">
+                <div class="url-input-group" style="position: relative;">
+                    <input type="email" id="newBotEmail" class="url-input" placeholder="Email (opcional)">
+                    <div style="position: relative; flex: 1;">
+                        <input type="password" id="newBotPassword" class="url-input" placeholder="Senha (opcional)" style="width: 100%;">
+                        <button type="button" onclick="togglePassword()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; padding: 5px;">👁️</button>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center; margin: 10px 0;">
+                    <button type="button" onclick="selectAuthType('google')" class="auth-btn" id="btnGoogle">🔴 Google</button>
+                    <button type="button" onclick="selectAuthType('github')" class="auth-btn" id="btnGithub">⚫ GitHub</button>
+                    <button type="button" onclick="selectAuthType('facebook')" class="auth-btn" id="btnFacebook">🔵 Facebook</button>
+                    <button type="button" onclick="selectAuthType('email')" class="auth-btn active" id="btnEmail">✉️ Email</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <label style="color: #ffd700; font-size: 0.9rem; white-space: nowrap;">🤖 API IA:</label>
+                    <select id="apiSelector" class="url-input" style="flex: 1; background: rgba(0,0,0,0.3);">
+                        <option value="gemini">🔵 Gemini (Grátis/Pago)</option>
+                        <option value="chatgpt">🟢 ChatGPT (Pago)</option>
+                        <option value="claude">🟣 Claude (Pago)</option>
+                        <option value="deepseek">🔴 DeepSeek (Grátis/Pago)</option>
+                        <option value="ollama">🟤 Ollama/Local (Grátis)</option>
+                    </select>
+                </div>
+                <button class="btn-save" onclick="createBot()" style="width: 100%;">➕ Adicionar Bot</button>
+            </div>
+            <p style="color: #666; margin-top: 10px; font-size: 0.9rem;">
+                💡 Se não informar email/senha, você terá 60 segundos para fazer login manual no navegador
+            </p>
+        </div>
+
+        <div class="config-section" style="background: linear-gradient(135deg, rgba(255,105,180,0.1) 0%, rgba(138,43,226,0.1) 100%); border: 1px solid rgba(255,105,180,0.3);">
+            <h4>🎙️ Assistente de Voz</h4>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="color: #ff69b4; font-size: 0.9rem; white-space: nowrap; min-width: 110px;">� Nome dela:</label>
+                    <input type="text" id="assistantName" class="url-input" value="Maria" placeholder="Ex: Maria, Ana, Sofia" style="flex: 1;">
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="color: #ff69b4; font-size: 0.9rem; white-space: nowrap; min-width: 110px;">🗣️ Como chamar:</label>
+                    <input type="text" id="wakeWord" class="url-input" value="Ei Maria" placeholder="Ex: Ei Maria, Oi Ana" style="flex: 1;">
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="color: #ff69b4; font-size: 0.9rem; white-space: nowrap; min-width: 110px;">🔊 Tipo de voz:</label>
+                    <select id="voiceGender" class="url-input" style="flex: 1; background: rgba(0,0,0,0.3);">
+                        <option value="female">👩 Feminina</option>
+                        <option value="male">👨 Masculina</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" onclick="toggleVoiceMode()" class="auth-btn" id="btnVoiceMode">
+                        🔊 Voz: OFF
+                    </button>
+                    <button type="button" onclick="requestMicAccess()" class="auth-btn" style="background: rgba(255,100,100,0.2); border: 1px solid rgba(255,100,100,0.5);" id="btnMicAccess">
+                        🎤 Ativar Microfone
+                    </button>
+                    <button type="button" onclick="testVoice()" class="auth-btn" style="background: rgba(255,105,180,0.2);">
+                        🧪 Testar Voz
+                    </button>
+                    <button type="button" onclick="viewReport()" class="auth-btn" style="background: rgba(255,215,0,0.2);">
+                        📊 Relatório
+                    </button>
+                    <button type="button" onclick="listVoices()" class="auth-btn" style="background: rgba(100,200,255,0.2);">
+                        🎵 Vozes
+                    </button>
+                </div>
+                <div id="voiceStatus" style="font-size: 0.8rem; color: #888; text-align: center;">
+                    🎤 <strong>IMPORTANTE:</strong> Primeiro clique "🎤 Ativar Microfone" e PERMITA o acesso quando o navegador pedir. Depois clique "🔊 Voz: ON"
+                </div>
+            </div>
+        </div>
+
+        <div class="main-layout">
+            <div class="bots-section">
+                <h3>
+                    🤖 Bots Ativos
+                    <span class="bot-count" id="botCount">0/10</span>
+                </h3>
+                <div id="botsGrid" class="bots-grid">
+                    <div class="empty-state">
+                        Nenhum bot criado ainda.<br>
+                        Adicione uma plataforma acima para começar.
+                    </div>
+                </div>
+            </div>
+
+            <div class="logs-section">
+                <h3>📋 Logs em Tempo Real</h3>
+                <button class="log-clear" onclick="clearLogs()" style="margin-bottom: 10px; width: 100%;">Limpar Logs</button>
+                <div id="logs-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const logsContainer = document.getElementById('logs-container');
+        const botsGrid = document.getElementById('botsGrid');
+        const botCount = document.getElementById('botCount');
+        const newBotUrl = document.getElementById('newBotUrl');
+
+        let bots = new Map();
+        let selectedAuthType = 'email';
+
+        function togglePassword() {
+            const passwordInput = document.getElementById('newBotPassword');
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+            } else {
+                passwordInput.type = 'password';
+            }
+        }
+
+        function selectAuthType(type) {
+            selectedAuthType = type;
+            
+            // Remove active de todos
+            document.querySelectorAll('.auth-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // Adiciona active no selecionado
+            document.getElementById('btn' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('active');
+            
+            // Mostra/esconde campos de email/senha
+            const emailField = document.getElementById('newBotEmail');
+            const passwordField = document.getElementById('newBotPassword');
+            
+            if (type === 'email') {
+                emailField.placeholder = 'Email (opcional)';
+                passwordField.placeholder = 'Senha (opcional)';
+                emailField.style.display = 'block';
+                passwordField.parentElement.style.display = 'block';
+            } else {
+                emailField.style.display = 'none';
+                passwordField.parentElement.style.display = 'none';
+            }
+        }
+
+        // ============ SISTEMA DE VOZ E RELATÓRIOS ============
+        let voiceMode = false;
+        let recognition = null;
+        let wakeWord = 'Ei Maria';
+        let assistantName = 'Maria';
+        let voiceGender = 'female';
+        let taskStats = { created: 0, completed: 0, failed: 0, responses: [] };
+
+        function updateVoiceSettings() {
+            wakeWord = document.getElementById('wakeWord').value || 'Ei Maria';
+            assistantName = document.getElementById('assistantName').value || 'Maria';
+            voiceGender = document.getElementById('voiceGender').value || 'female';
+        }
+
+        async function toggleVoiceMode() {
+            updateVoiceSettings();
+            const btn = document.getElementById('btnVoiceMode');
+            const status = document.getElementById('voiceStatus');
+            
+            // Se vai ativar, primeiro pede permissão do microfone
+            if (!voiceMode) {
+                status.innerHTML = '🎤 Solicitando permissão do microfone...';
+                status.style.color = '#ffaa00';
+                
+                const hasPermission = await requestMicrophonePermission();
+                
+                if (!hasPermission) {
+                    status.innerHTML = '❌ Permissão de microfone negada! Clique no 🔒 na barra do navegador, vá em "Permissões" e permita o microfone. Depois recarregue a página.';
+                    status.style.color = '#ff4444';
+                    addLog('-', '❌ Permissão de microfone negada pelo usuário ou bloqueada', 'error');
+                    return; // Não ativa o modo voz
+                }
+            }
+            
+            voiceMode = !voiceMode;
+            
+            if (voiceMode) {
+                updateVoiceSettings();
+                btn.innerHTML = '🔊 Voz: ON';
+                btn.classList.add('active');
+                btn.style.background = 'rgba(255,105,180,0.3)';
+                status.innerHTML = '🎙️ Ouvindo... Diga "' + wakeWord + ' + comando" para falar com ' + assistantName + '!';
+                status.style.color = '#ff69b4';
+                startListening();
+                setTimeout(() => {
+                    speak(`Olá! Eu sou ${assistantName}. Estou pronta para ajudar!`);
+                }, 500);
+            } else {
+                btn.innerHTML = '🔊 Voz: OFF';
+                btn.classList.remove('active');
+                btn.style.background = '';
+                status.innerHTML = '🤖 Clique "Voz: ON" para ativar assistente por voz';
+                status.style.color = '#888';
+                stopListening();
+            }
+        }
+
+        let microphoneAllowed = false;
+
+        async function requestMicrophonePermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                microphoneAllowed = true;
+                // Para o stream imediatamente, só queremos a permissão
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (err) {
+                console.error('Erro microfone:', err);
+                microphoneAllowed = false;
+                return false;
+            }
+        }
+
+        // Função chamada pelo botão "Ativar Microfone"
+        async function requestMicAccess() {
+            const status = document.getElementById('voiceStatus');
+            const btnMic = document.getElementById('btnMicAccess');
+            
+            status.innerHTML = '🎤 Solicitando acesso ao microfone... Verifique se apareceu um popup pedindo permissão!';
+            status.style.color = '#ffaa00';
+            
+            const hasPermission = await requestMicrophonePermission();
+            
+            if (hasPermission) {
+                status.innerHTML = '✅ Microfone PERMITIDO! Agora você pode clicar em "🔊 Voz: ON" para começar.';
+                status.style.color = '#00ff88';
+                btnMic.innerHTML = '✅ Microfone OK';
+                btnMic.style.background = 'rgba(0,255,0,0.3)';
+                btnMic.style.borderColor = '#00ff88';
+                addLog('-', '✅ Microfone ativado com sucesso!', 'success');
+            } else {
+                status.innerHTML = '❌ Microfone BLOQUEADO! Clique no ícone 🔒 na barra de endereço → Configurações de site → Microfone → Permitir';
+                status.style.color = '#ff4444';
+                addLog('-', '❌ Microfone bloqueado. Permita manualmente nas configurações do navegador.', 'error');
+            }
+        }
+
+        function startListening() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                speak('Reconhecimento de voz não suportado neste navegador.');
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'pt-BR';
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase();
+                console.log('🎤 Ouvi:', transcript);
+                
+                wakeWord = document.getElementById('wakeWord').value.toLowerCase();
+                
+                if (transcript.includes(wakeWord.toLowerCase())) {
+                    const command = transcript.replace(wakeWord.toLowerCase(), '').trim();
+                    handleVoiceCommand(command);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.log('Erro reconhecimento:', event.error);
+                
+                // Tratamento específico de erros
+                if (event.error === 'not-allowed') {
+                    const status = document.getElementById('voiceStatus');
+                    status.innerHTML = '❌ Microfone bloqueado! Clique no ícone 🔒 na barra do navegador e permita o microfone.';
+                    status.style.color = '#ff4444';
+                    voiceMode = false;
+                    document.getElementById('btnVoiceMode').innerHTML = '🔊 Voz: OFF';
+                    document.getElementById('btnVoiceMode').classList.remove('active');
+                    document.getElementById('btnVoiceMode').style.background = '';
+                }
+                
+                if (voiceMode && event.error !== 'not-allowed') {
+                    setTimeout(startListening, 1000);
+                }
+            };
+
+            recognition.onend = () => {
+                if (voiceMode) recognition.start();
+            };
+
+            try {
+                recognition.start();
+            } catch (err) {
+                console.error('Erro ao iniciar reconhecimento:', err);
+            }
+        }
+
+        function stopListening() {
+            if (recognition) {
+                recognition.stop();
+                recognition = null;
+            }
+        }
+
+        let isWaitingForAI = false;
+
+        function handleVoiceCommand(command) {
+            console.log('🎯 Comando:', command);
+            updateVoiceSettings();
+            
+            // Comandos de controle do sistema
+            if (command.includes('status') || command.includes('relatório') || command.includes('report')) {
+                generateVoiceReport();
+            } else if (command.includes('parar') || command.includes('stop') || command.includes('desligar')) {
+                speak(`${assistantName} aqui! Parando todos os bots.`);
+                bots.forEach((bot, id) => socket.emit('stop-bot', id));
+            } else if (command.includes('iniciar') || command.includes('start') || command.includes('começar') || command.includes('ligar')) {
+                speak(`${assistantName} aqui! Iniciando todos os bots.`);
+                bots.forEach((bot, id) => socket.emit('start-bot', id));
+            } else if (command.includes('limpar') || command.includes('clear') || command.includes('apagar')) {
+                speak(`${assistantName} aqui! Limpando logs.`);
+                clearLogs();
+            } else if (command.includes('quem é você') || command.includes('seu nome') || command.includes('como se chama')) {
+                speak(`Oi! Eu sou ${assistantName}, sua assistente virtual! Estou aqui pra te ajudar com os bots e também podemos conversar sobre qualquer coisa. Como posso te ajudar hoje?`);
+            } else if (command.includes('tudo bem') || command.includes('como vai') || command.includes('tudo bom')) {
+                speak(`Estou ótima, obrigada por perguntar! E você, como está? Posso fazer algo por você?`);
+            } else if (command.includes('obrigado') || command.includes('obrigada') || command.includes('valeu')) {
+                speak(`De nada! Estou aqui sempre que precisar. Pode contar comigo!`);
+            } else if (command.includes('bom dia') || command.includes('boa tarde') || command.includes('boa noite')) {
+                const hora = new Date().getHours();
+                let cumprimento = 'Boa noite';
+                if (hora < 12) cumprimento = 'Bom dia';
+                else if (hora < 18) cumprimento = 'Boa tarde';
+                speak(`${cumprimento}! Como posso te ajudar hoje?`);
+            } else {
+                // Não é um comando conhecido - envia para IA conversar naturalmente
+                if (!isWaitingForAI && command.length > 2) {
+                    isWaitingForAI = true;
+                    speak('Deixa eu pensar...');
+                    
+                    addLog('-', `🎙️ ${assistantName} ouviu: "${command}"`, 'info');
+                    
+                    // Envia para o servidor conversar com a IA
+                    socket.emit('voice-chat', { 
+                        message: command, 
+                        assistantName: assistantName,
+                        apiProvider: document.getElementById('apiSelector').value || 'gemini'
+                    });
+                }
+            }
+        }
+
+        // Recebe resposta da IA
+        socket.on('voice-chat-response', ({ success, response, assistantName, error }) => {
+            isWaitingForAI = false;
+            
+            if (success && response) {
+                // Limpa a resposta para fala (remove markdown, emojis excessivos, etc)
+                let cleanResponse = response
+                    .replace(/\*\*/g, '')
+                    .replace(/\*/g, '')
+                    .replace(/`/g, '')
+                    .replace(/#{1,6}\s?/g, '')
+                    .substring(0, 200); // Limita tamanho para não ficar muito longo
+                
+                speak(cleanResponse);
+                addLog('-', `🗣️ ${assistantName} respondeu (IA): "${cleanResponse}"`, 'success');
+            } else {
+                speak(`Desculpe, não consegui entender direito. Pode repetir?`);
+                addLog('-', `❌ Erro na conversa com IA: ${error || 'Desconhecido'}`, 'error');
+            }
+        });
+
+        function speak(text) {
+            if (!voiceMode) return;
+            
+            updateVoiceSettings();
+            
+            if ('speechSynthesis' in window) {
+                // Cancela fala anterior
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 1;
+                utterance.pitch = voiceGender === 'female' ? 1.2 : 0.9;
+                
+                // Seleciona voz baseada no gênero
+                const voices = window.speechSynthesis.getVoices();
+                let selectedVoice = null;
+                
+                // Procura voz feminina em português
+                if (voiceGender === 'female') {
+                    selectedVoice = voices.find(v => 
+                        v.lang.includes('pt') && 
+                        (v.name.toLowerCase().includes('female') || 
+                         v.name.toLowerCase().includes('mulher') ||
+                         v.name.toLowerCase().includes('feminina') ||
+                         v.name.toLowerCase().includes('maria') ||
+                         v.name.toLowerCase().includes('ana') ||
+                         v.name.toLowerCase().includes('joana') ||
+                         v.name.includes('Google US English') === false)
+                    );
+                    // Se não encontrou específica, pega primeira voz pt que não seja claramente masculina
+                    if (!selectedVoice) {
+                        selectedVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt-PT'));
+                    }
+                } else {
+                    // Voz masculina
+                    selectedVoice = voices.find(v => 
+                        v.lang.includes('pt') && 
+                        (v.name.toLowerCase().includes('male') || 
+                         v.name.toLowerCase().includes('homem') ||
+                         v.name.toLowerCase().includes('masculina'))
+                    );
+                }
+                
+                if (selectedVoice) utterance.voice = selectedVoice;
+                
+                window.speechSynthesis.speak(utterance);
+            }
+            
+            addLog('-', `🗣️ ${assistantName} falou: "${text}"`, 'info');
+        }
+
+        function testVoice() {
+            updateVoiceSettings();
+            speak(`Olá! Eu sou ${assistantName}. Voz testada e funcionando perfeitamente!`);
+        }
+
+        function listVoices() {
+            if (!('speechSynthesis' in window)) {
+                addLog('-', '❌ Seu navegador não suporta síntese de voz', 'error');
+                return;
+            }
+            
+            const voices = window.speechSynthesis.getVoices();
+            const ptVoices = voices.filter(v => v.lang.includes('pt'));
+            
+            let html = `
+                <div style="background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; margin: 10px 0; max-height: 300px; overflow-y: auto;">
+                    <h4 style="color: #ff69b4; margin-bottom: 10px;">🎵 Vozes em Português (${ptVoices.length})</h4>
+            `;
+            
+            if (ptVoices.length === 0) {
+                html += '<p style="color: #888;">Nenhuma voz em português encontrada.</p>';
+            } else {
+                ptVoices.forEach((voice, i) => {
+                    const isFemale = voice.name.toLowerCase().includes('female') || 
+                                    voice.name.toLowerCase().includes('maria') ||
+                                    voice.name.toLowerCase().includes('ana') ||
+                                    voice.name.toLowerCase().includes('feminina');
+                    const icon = isFemale ? '👩' : '👨';
+                    html += `<p style="font-size: 0.8rem; margin: 5px 0; color: ${isFemale ? '#ff69b4' : '#66ccff'};">${icon} ${voice.name}</p>`;
+                });
+            }
+            
+            html += '</div>';
+            logsContainer.insertAdjacentHTML('beforeend', html);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+            
+            // Fala quantas vozes encontrou
+            const femaleCount = ptVoices.filter(v => 
+                v.name.toLowerCase().includes('female') || 
+                v.name.toLowerCase().includes('maria') ||
+                v.name.toLowerCase().includes('feminina')
+            ).length;
+            
+            if (voiceMode) {
+                speak(`Encontrei ${ptVoices.length} vozes em português. ${femaleCount} são femininas.`);
+            }
+        }
+
+        function generateVoiceReport() {
+            updateVoiceSettings();
+            const running = Array.from(bots.values()).filter(b => b.status === 'running').length;
+            const total = bots.size;
+            const msg = `${assistantName} aqui! Temos ${running} de ${total} bots ativos e já completamos ${taskStats.completed} tarefas.`;
+            speak(msg);
+        }
+
+        function viewReport() {
+            updateVoiceSettings();
+            const running = Array.from(bots.values()).filter(b => b.status === 'running').length;
+            const html = `
+                <div style="background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; margin: 10px 0;">
+                    <h4 style="color: #ff69b4; margin-bottom: 15px;">🎙️ Relatório da ${assistantName}</h4>
+                    <p><strong>👩 Assistente:</strong> ${assistantName} (${voiceGender === 'female' ? 'Voz Feminina' : 'Voz Masculina'})</p>
+                    <p><strong>🗣️ Comando de voz:</strong> "${wakeWord}"</p>
+                    <p><strong>🤖 Bots criados:</strong> ${bots.size}</p>
+                    <p><strong>▶️ Bots rodando:</strong> ${running}</p>
+                    <p><strong>✅ Tarefas completadas:</strong> ${taskStats.completed}</p>
+                    <p><strong>🔊 Modo voz:</strong> ${voiceMode ? 'Ativado' : 'Desativado'}</p>
+                </div>
+            `;
+            logsContainer.insertAdjacentHTML('beforeend', html);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        // Atualiza relatório quando recebe logs
+        socket.on('bot-log', ({ botId, message, type }) => {
+            addLog(botId, message, type);
+            
+            // Detecta quando bot completa tarefa
+            if (message.includes('Resposta enviada') || message.includes('✅')) {
+                taskStats.completed++;
+                taskStats.responses.push({ botId, message, time: new Date().toLocaleTimeString() });
+                
+                // Avisa por voz se estiver ativo
+                if (voiceMode && taskStats.completed % 5 === 0) {
+                    updateVoiceSettings();
+                    speak(`${assistantName} aqui! Já completamos ${taskStats.completed} tarefas!`);
+                }
+            }
+            
+            // Detecta quando não há mais tarefas
+            if (message.includes('nenhuma tarefa') || message.includes('não encontrei') || message.includes('sem perguntas')) {
+                if (voiceMode) {
+                    updateVoiceSettings();
+                    speak(`${assistantName} aqui! Não encontrei mais tarefas no momento. Vou continuar procurando.`);
+                }
+            }
+        });
+
+        // Carrega vozes quando disponíveis
+        if ('speechSynthesis' in window) {
+            function loadVoices() {
+                const voices = window.speechSynthesis.getVoices();
+                console.log('🎵 Vozes carregadas:', voices.length);
+            }
+            
+            loadVoices();
+            
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }
+        }
+
+        // Verificação de compatibilidade
+        function checkBrowserCompatibility() {
+            const status = document.getElementById('voiceStatus');
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            const isEdge = /Edg/.test(navigator.userAgent);
+            
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                status.innerHTML = '❌ Seu navegador não suporta reconhecimento de voz! Use Chrome ou Edge.';
+                status.style.color = '#ff4444';
+                document.getElementById('btnVoiceMode').disabled = true;
+                document.getElementById('btnMicAccess').disabled = true;
+                return false;
+            }
+            
+            if (!isChrome && !isEdge) {
+                status.innerHTML = '⚠️ Para melhor experiência de voz, use Google Chrome ou Microsoft Edge.';
+                status.style.color = '#ffaa00';
+            }
+            
+            return true;
+        }
+
+        // Verifica compatibilidade ao carregar
+        checkBrowserCompatibility();
+
+        // ================================================
+
+        function createBot() {
+            const url = newBotUrl.value.trim();
+            const email = document.getElementById('newBotEmail').value.trim();
+            const password = document.getElementById('newBotPassword').value;
+            const apiProvider = document.getElementById('apiSelector').value;
+            
+            if (!url) return;
+            
+            socket.emit('create-bot', { url, email, password, authType: selectedAuthType, apiProvider });
+            newBotUrl.value = '';
+            document.getElementById('newBotEmail').value = '';
+            document.getElementById('newBotPassword').value = '';
+            
+            // Reset para email e gemini
+            selectAuthType('email');
+            document.getElementById('apiSelector').value = 'gemini';
+        }
+
+        newBotUrl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') createBot();
+        });
+
+        function startBot(id) {
+            socket.emit('start-bot', id);
+        }
+
+        function stopBot(id) {
+            socket.emit('stop-bot', id);
+        }
+
+        function removeBot(id) {
+            if (confirm('Remover este bot?')) {
+                socket.emit('remove-bot', id);
+            }
+        }
+
+        function addLog(botId, message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString('pt-BR');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `
+                <span class="log-bot-id">[#${botId}]</span>
+                <span class="timestamp">${timestamp}</span>${message}
+            `;
+            logsContainer.appendChild(entry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        function renderBots() {
+            if (bots.size === 0) {
+                botsGrid.innerHTML = `
+                    <div class="empty-state">
+                        Nenhum bot criado ainda.<br>
+                        Adicione uma plataforma acima para começar.
+                    </div>
+                `;
+                botCount.textContent = '0/10';
+                return;
+            }
+
+            botsGrid.innerHTML = '';
+            bots.forEach((bot, id) => {
+                const card = document.createElement('div');
+                card.className = 'bot-card';
+                const apiIcon = bot.apiProvider === 'chatgpt' ? '🟢' : bot.apiProvider === 'claude' ? '🟣' : bot.apiProvider === 'deepseek' ? '🔴' : bot.apiProvider === 'ollama' ? '🟤' : '🔵';
+                const authIcon = bot.hasCredentials ? '🔐' : (bot.authType === 'google' ? '🔴' : bot.authType === 'github' ? '⚫' : bot.authType === 'facebook' ? '🔵' : '👤');
+                
+                card.innerHTML = `
+                    <div class="bot-header">
+                        <span class="bot-id">Bot #${id}</span>
+                        <div class="bot-status ${bot.status}"></div>
+                    </div>
+                    <div class="bot-url" title="${bot.url}">${bot.url}</div>
+                    <div style="font-size: 0.75rem; color: ${bot.hasCredentials ? '#00ff88' : (bot.authType !== 'manual' ? '#ffd700' : '#888')}; margin-bottom: 4px;">
+                        ${authIcon} ${bot.hasCredentials ? 'Login automático' : (bot.authType === 'google' ? 'Login Google' : bot.authType === 'github' ? 'Login GitHub' : bot.authType === 'facebook' ? 'Login Facebook' : 'Login manual')}
+                    </div>
+                    <div style="font-size: 0.7rem; color: #aaa; margin-bottom: 8px;">
+                        ${apiIcon} IA: ${bot.apiProvider ? bot.apiProvider.charAt(0).toUpperCase() + bot.apiProvider.slice(1) : 'Gemini'}
+                    </div>
+                    <div class="bot-controls">
+                        <button class="btn-bot-start" onclick="startBot(${id})" ${bot.status === 'running' ? 'disabled' : ''}>
+                            ▶
+                        </button>
+                        <button class="btn-bot-stop" onclick="stopBot(${id})" ${bot.status !== 'running' ? 'disabled' : ''}>
+                            ⏹
+                        </button>
+                        <button class="btn-bot-remove" onclick="removeBot(${id})">
+                            🗑️
+                        </button>
+                    </div>
+                `;
+                botsGrid.appendChild(card);
+            });
+
+            botCount.textContent = `${bots.size}/10`;
+        }
+
+        function clearLogs() {
+            logsContainer.innerHTML = '';
+        }
+
+        socket.on('connect', () => {
+            addLog('-', '🔗 Conectado ao servidor', 'success');
+        });
+
+        socket.on('disconnect', () => {
+            addLog('-', '🔌 Desconectado do servidor', 'warning');
+        });
+
+        socket.on('bot-created', ({ botId, url, hasCredentials, authType, apiProvider }) => {
+            bots.set(botId, { id: botId, url, status: 'stopped', hasCredentials, authType: authType || 'manual', apiProvider: apiProvider || 'gemini' });
+            renderBots();
+            const authMsg = hasCredentials ? 'com login email' : (authType && authType !== 'manual' ? `com login ${authType}` : 'login manual');
+            const apiName = apiProvider ? apiProvider.charAt(0).toUpperCase() + apiProvider.slice(1) : 'Gemini';
+            addLog(botId, `✅ Bot criado (${authMsg} + ${apiName})`, 'success');
+        });
+
+        socket.on('bot-removed', ({ botId }) => {
+            bots.delete(botId);
+            renderBots();
+        });
+
+        socket.on('bot-status', ({ botId, status }) => {
+            if (bots.has(botId)) {
+                bots.get(botId).status = status;
+                renderBots();
+            }
+        });
+
+        socket.on('log', ({ message, type }) => {
+            addLog('-', message, type);
+        });
+
+        socket.on('bots-list', (list) => {
+            bots.clear();
+            list.forEach(bot => bots.set(bot.id, { ...bot, authType: bot.authType || 'manual', apiProvider: bot.apiProvider || 'gemini' }));
+            renderBots();
+        });
+    </script>
+</body>
+</html>

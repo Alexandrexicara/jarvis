@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: jarvis-voz-agente
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python jarvis/Jarvis-Completo/jarvis.py"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_MODEL
+        sync: false
+      - key: NVIDIA_BASE_URL
+        value: https://integrate.api.nvidia.com/v1

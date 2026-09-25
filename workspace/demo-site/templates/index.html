@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}JARVIS Demo{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">PROJETO GERADO PELO JARVIS</p>
+  <h1>Seu espaço digital começa aqui.</h1>
+  <p>Uma base funcional com autenticação, sessão segura e banco de dados SQLite.</p>
+  <div class="actions"><a class="button" href="{{ url_for('register') }}">Criar conta</a><a class="button secondary" href="{{ url_for('login') }}">Entrar</a></div>
+</section>
+{% endblock %}

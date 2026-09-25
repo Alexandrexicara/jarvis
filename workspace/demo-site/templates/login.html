@@ -1,0 +1,3 @@
+{% extends 'base.html' %}
+{% block title %}Entrar{% endblock %}
+{% block content %}<section class="card narrow"><p class="eyebrow">ACESSO SEGURO</p><h1>Entrar no dashboard</h1><form method="post"><label>E-mail<input type="email" name="email" required autocomplete="email"></label><label>Senha<input type="password" name="password" required autocomplete="current-password"></label><button class="button" type="submit">Entrar</button></form><p class="muted">Ainda não tem conta? <a href="{{ url_for('register') }}">Criar conta</a></p></section>{% endblock %}

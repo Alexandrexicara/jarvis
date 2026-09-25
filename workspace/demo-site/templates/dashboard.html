@@ -1,0 +1,3 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}<section class="card"><p class="eyebrow">ÁREA AUTENTICADA</p><h1>Olá, {{ g.user['name'] }}.</h1><p>Seu login funcionou e esta página só pode ser acessada com sessão válida.</p><div class="data"><span>E-mail</span><strong>{{ g.user['email'] }}</strong></div><div class="data"><span>Banco</span><strong>SQLite conectado</strong></div></section>{% endblock %}

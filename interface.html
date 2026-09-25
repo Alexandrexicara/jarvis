@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>JARVIS — SEMPRE ATIVO</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;color:#f34805;font-family:'Courier New',monospace;height:100vh;overflow:hidden;}
+.titulo{position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:32px;letter-spacing:6px;text-shadow:0 0 15px #ff6600;}
+.estado{position:absolute;top:75px;left:50%;transform:translateX(-50%);font-size:18px;color:#00ff44;}
+.circulo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:350px;height:350px;border-radius:50%;border:4px solid #00ccff;box-shadow:0 0 50px #00ccff;animation:repouso 3s infinite;}
+.circulo.ouvindo{border-color:#00ff44;box-shadow:0 0 70px #00ff44;animation:ouvindo 0.4s infinite alternate;}
+.circulo.falando{border-color:#ff1100;box-shadow:0 0 70px #ff1e00;animation:falando 0.25s infinite alternate;}
+@keyframes repouso{0%,100%{box-shadow:0 0 40px #00ccff;}50%{box-shadow:0 0 60px #00ffff;}}
+@keyframes ouvindo{0%{transform:translate(-50%,-50%) scale(1);}100%{transform:translate(-50%,-50%) scale(1.04);}}
+@keyframes falando{0%{transform:translate(-50%,-50%) scale(0.96);}100%{transform:translate(-50%,-50%) scale(1.04);}}
+.texto{display:none;}
+.ativar{position:absolute;bottom:255px;left:50%;transform:translateX(-50%);padding:12px 22px;background:#003b4d;color:#fff;border:1px solid #00ccff;border-radius:6px;font:inherit;cursor:pointer;}
+.ativar:hover{background:#00556b;}
+.log{display:none;}
+.voce{color:#fa4d08;}
+.jarvis{color:#00ff88;}
+.sistema{color:#ff0800;}
+</style>
+</head>
+<body>
+<div class="titulo">J.A.R.V.I.S</div>
+<div class="estado" id="estado">✅ PRONTO — Diga: "Jarvis, o que horas são?"</div>
+<div class="circulo" id="circulo"></div>
+<div class="texto" id="texto">Aguardando seu comando...</div>
+<button class="ativar" id="ativar" type="button">🎤 Ativar microfone</button>
+<div class="log" id="log">
+<p class="sistema">✅ Sistema carregado — fale direto, sem clicar nada</p>
+</div>
+
+<script>
+const reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
+const circ = document.getElementById('circulo');
+const texto = document.getElementById('texto');
+const estado = document.getElementById('estado');
+const log = document.getElementById('log');
+const botaoAtivar = document.getElementById('ativar');
+let reconhecimentoBloqueado = false;
+let reconhecimentoAtual = null;
+let falaEmAndamento = false;
+let modoDescanso = false;
+
+async function ativarMicrofone(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    stream.getTracks().forEach(track => track.stop());
+    reconhecimentoBloqueado = false;
+    botaoAtivar.style.display = 'none';
+    iniciarUmaVez();
+  }catch(erro){
+    botaoAtivar.style.display = 'block';
+    estado.textContent = "⚠️ Permita o acesso ao microfone";
+    texto.textContent = "Clique em Permitir no aviso do navegador.";
+    adicionar("⚠️", "Microfone bloqueado: " + erro.name, 'sistema');
+  }
+}
+
+botaoAtivar.addEventListener('click', ativarMicrofone);
+
+function adicionar(quem, msg, classe=''){
+  const p = document.createElement('p');
+  p.className = classe;
+  p.textContent = quem + ": " + msg;
+  log.appendChild(p);
+  log.scrollTop = log.scrollHeight;
+}
+
+function limparParaFala(frase){
+  return String(frase || '')
+    .replace(/https?:\/\/\S+/gi, ' link ')
+    .replace(/```[\s\S]*?```/g, ' bloco de código ')
+    .replace(/[*_`#~]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-/%]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function falaJarvis(frase){
+  if(modoDescanso){
+    falaEmAndamento = false;
+    return;
+  }
+  const textoFalado = limparParaFala(frase);
+  if(!textoFalado) return;
+  falaEmAndamento = true;
+  if(reconhecimentoAtual){
+    reconhecimentoAtual.stop();
+    reconhecimentoAtual = null;
+  }
+  circ.className = "circulo falando";
+  estado.textContent = "🔊 Falando...";
+  
+  const f = new SpeechSynthesisUtterance(textoFalado);
+  f.lang = 'pt-BR';
+  f.rate = 1.05;
+  f.volume = 1;
+  f.onend = () => {
+    falaEmAndamento = false;
+    circ.className = "circulo";
+    estado.textContent = "✅ Pronto — fale quando quiser";
+      setTimeout(iniciarUmaVez, 600);
+  };
+  f.onerror = () => {
+    falaEmAndamento = false;
+    setTimeout(iniciarUmaVez, 300);
+  };
+  speechSynthesis.cancel();
+  speechSynthesis.speak(f);
+}
+
+function processar(comando){
+  const original = String(comando || '').trim();
+  const chamouJarvis = /^jarvis(?:\s|[,;:!?]|$)/i.test(original);
+  const t = original.toLowerCase().replace(/^\s*jarvis[\s,;:]*/i, '').trim();
+  adicionar("👤 VOCÊ", comando, 'voce');
+
+  if(modoDescanso && !chamouJarvis){
+    estado.textContent = "😴 Descansando — diga Jarvis para ativar";
+    return true;
+  }
+  if(modoDescanso && chamouJarvis){
+    modoDescanso = false;
+    estado.textContent = "✅ Ativo — estou ouvindo";
+    if(!t){
+      falaJarvis("Estou de volta e ouvindo.");
+      return true;
+    }
+  }
+
+  if(/^descansar$|^entrar em descanso$|^ficar em silêncio$|^ficar em silencio$/.test(t)){
+    modoDescanso = true;
+    speechSynthesis.cancel();
+    falaEmAndamento = false;
+    circ.className = "circulo";
+    estado.textContent = "😴 Descansando — diga Jarvis para ativar";
+    return true;
+  }
+
+  if(t.includes("está me ouvindo") || t.includes("esta me ouvindo") || t.includes("está ouvindo") || t.includes("esta ouvindo") || t === "teste"){
+    falaJarvis("Sim, estou ouvindo você. Pode perguntar o que quiser.");
+    return true;
+  }
+
+  // Comandos locais específicos. Perguntas normais continuam indo para a IA.
+  if(/^que horas são\??$|^que horas e\??$|^hora\??$/.test(t)){
+    const h = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    falaJarvis(`Agora são ${h}, senhor.`);
+    return true;
+  }
+  if(/^qual é a data\??$|^qual a data\??$|^que dia é hoje\??$|^que dia e hoje\??$/.test(t)){
+    const d = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    falaJarvis(`Hoje é ${d}.`);
+    return true;
+  }
+  if(/^abrir google$|^abra o google$/.test(t)){
+    falaJarvis("Abrindo o Google.");
+    window.open("https://google.com","_blank");
+    return true;
+  }
+  if(/^abrir youtube$|^abra o youtube$/.test(t)){
+    falaJarvis("Abrindo o YouTube.");
+    window.open("https://youtube.com","_blank");
+    return true;
+  }
+  if(/^pesquisar(?: sobre)?\s+(.+)/.test(t)){
+    const termo = t.replace(/^pesquisar(?: sobre)?\s+/i, '').trim();
+    adicionar("🌐", `Pesquisando na web sobre ${termo}.`, 'sistema');
+    consultarInteligencia(`Pesquise na web e responda com informações atuais sobre: ${termo}`, true);
+    return false;
+  }
+  if(/^quem é você\??$|^quem e voce\??$|^qual seu nome\??$|^qual é o seu nome\??$/.test(t)){
+    falaJarvis("Sou Jarvis, seu assistente de inteligência artificial. Pode me fazer perguntas gerais.");
+    return true;
+  }
+  if(/^desligar$|^sair$/.test(t)){
+    falaJarvis("Desligando. Até logo!");
+    return true;
+  }
+
+  // Pedidos de programação entram no agente de código; perguntas comuns entram na IA.
+  const ehCodigo = /\b(código|codigo|gerar código|gerar codigo|programar|programação|programacao|projeto|arquivo|bug|erro|corrija|corrigir|conserte|consertar|implemente|implementar|crie um app|criar um app|gerar app|gere um app|desenvolva|desenvolver|criar site|crie um site|gerar site|gere um site|website|web app|função|funcao|api|backend|frontend|javascript|python|html|css|react|node|npm|git)\b/i.test(t);
+  const ehPesquisa = /\b(pesquise|pesquisar|pesquisa|busque|buscar|busca|procure|procurar|notícias|noticias|informação atual|informacao atual|agora|hoje)\b/i.test(t);
+  consultarInteligencia(comando, ehCodigo || ehPesquisa);
+  return false;
+}
+async function consultarInteligencia(comando, agente=false){
+  estado.textContent = agente ? "🛠️ Agente trabalhando..." : "🧠 Pensando...";
+  try{
+    const resposta = await fetch(agente ? "/api/agent" : "/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({message: comando})
+    });
+    if(!resposta.ok) throw new Error("servidor indisponível");
+    const dados = await resposta.json();
+    const reply = dados.reply || "Não consegui responder agora.";
+    falaJarvis(reply);
+    if(/^APROVAÇÃO NECESSÁRIA:/i.test(reply)){
+      const aprovado = window.confirm("O JARVIS solicitou autorização para executar esta ação. Deseja aprovar?");
+      const confirmacao = await fetch("/api/approve", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({approved: aprovado})});
+      const resultado = await confirmacao.json();
+      falaJarvis(resultado.reply || "Aprovação processada.");
+    }
+  }catch(erro){
+    adicionar("⚠️", "Não foi possível acessar a IA.", 'sistema');
+    estado.textContent = "⚠️ IA indisponível";
+    setTimeout(iniciarUmaVez, 800);
+  }
+}
+
+function iniciarUmaVez(){
+  if(!reconhecimento){
+    estado.textContent = "⚠️ Use o Google Chrome";
+    return;
+  }
+
+  reconhecimentoBloqueado = false;
+  
+  if(reconhecimentoAtual || falaEmAndamento){
+    return;
+  }
+
+  const rec = new reconhecimento();
+  reconhecimentoAtual = rec;
+  rec.lang = 'pt-BR';
+  rec.continuous = true;
+  rec.interimResults = false;
+  
+  rec.onstart = () => {
+    circ.className = "circulo ouvindo";
+    estado.textContent = "🎤 OUVINDO... FALE!";
+  };
+  
+  rec.onresult = (e) => {
+    const falado = e.results[e.results.length - 1][0].transcript;
+    processar(falado);
+  };
+  
+  rec.onend = () => {
+    if(reconhecimentoAtual === rec){
+      reconhecimentoAtual = null;
+    }
+    if(!reconhecimentoBloqueado && !falaEmAndamento && !speechSynthesis.speaking){
+      setTimeout(iniciarUmaVez, 400);
+    }
+  };
+  
+  rec.onerror = (erro) => {
+    if(erro.error === 'no-speech'){
+      setTimeout(iniciarUmaVez, 300);
+    } else {
+      adicionar("⚠️", erro.error, 'sistema');
+      reconhecimentoBloqueado = true;
+      botaoAtivar.style.display = 'block';
+      estado.textContent = "⚠️ Permita o acesso ao microfone";
+      }
+  };
+  
+  rec.start();
+}
+
+window.onload = () => {
+  if(location.protocol === 'file:'){
+    estado.textContent = "⚠️ Abra pelo INICIAR-JARVIS.bat";
+    texto.textContent = "Execute o inicializador para usar o microfone.";
+    adicionar("⚠️", "Abra pelo INICIAR-JARVIS.bat para usar o servidor local.", 'sistema');
+    return;
+  }
+  setTimeout(() => falaJarvis("Sistema online. Diga Jarvis e o que você precisa."), 800);
+};
+</script>
+</body>
+</html>
