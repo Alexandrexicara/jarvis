@@ -1,0 +1,5 @@
+
+
+
+Set-Location E:\jarvis
+.\INICIAR-JARVIS.bat

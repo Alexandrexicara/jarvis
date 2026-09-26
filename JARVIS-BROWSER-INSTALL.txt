@@ -1,0 +1,61 @@
+JARVIS — CONTROLE DE NAVEGADOR COM PLAYWRIGHT
+==============================================
+
+1) Abra PowerShell na pasta Jarvis-Completo.
+
+2) Instale as dependências:
+
+pip install -r requirements.txt
+
+3) Instale o navegador Chromium:
+
+python -m playwright install chromium
+
+4) Se quiser usar o Chrome instalado no Windows em vez do Chromium do Playwright,
+   adicione ao .env:
+
+JARVIS_BROWSER_CHANNEL=chrome
+JARVIS_BROWSER_HEADLESS=0
+
+5) Para servidor sem interface gráfica (ex.: Render), use:
+
+JARVIS_BROWSER_HEADLESS=1
+
+IMPORTANTE SOBRE O TOKEN MCP
+----------------------------
+A integração direta deste JARVIS com Playwright usa Python/Playwright e NÃO precisa
+ de token para abrir o navegador.
+
+Se você também usar o Playwright MCP + extensão do navegador, o token da extensão é:
+
+PLAYWRIGHT_MCP_EXTENSION_TOKEN
+
+Não coloque o valor real no GitHub. Guarde-o no .env/Secrets.
+
+COMANDOS DE TESTE
+-----------------
+
+python -m py_compile jarvis.py browser_controller.py
+
+python jarvis.py
+
+Depois fale/digite comandos como:
+
+"Jarvis, abra o YouTube."
+"Jarvis, procure Eduardo Costa no YouTube e abra o primeiro resultado."
+"Jarvis, abra o primeiro resultado."
+"Jarvis, clique no link X."
+"Jarvis, volte."
+"Jarvis, avance."
+"Jarvis, atualize a página."
+
+O JARVIS só deve dizer que abriu depois que o Playwright retornar success=true.
+
+ATENÇÃO — RENDER
+----------------
+Se o JARVIS estiver rodando somente no Render, o Chromium controlado pelo Python
+fica no servidor Render. Ele não consegue controlar diretamente o Chrome físico
+do seu PC apenas por estar hospedado no Render.
+
+Para controlar o Chrome do seu PC, execute o componente local do JARVIS/Playwright
+no PC ou use a integração Playwright MCP + extensão do navegador.
