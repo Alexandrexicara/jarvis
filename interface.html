@@ -253,6 +253,80 @@ async function processar(comando){
     );
   }
 
+  // ABRIR PESQUISA E CLICAR EM TEXTO
+  let abrirEClickar = t.match(
+    /^(?:abrir|abra|pesquisar|pesquise)\s+(?:link\s+)?(.+?)\s+(?:clicar|clique|clicar nele|clique nele)\s+(.+)$/i
+  );
+
+  if(abrirEClickar){
+    const pesquisa = abrirEClickar[1].trim();
+    const textoClique = abrirEClickar[2].trim();
+
+    console.log(
+      "[DEBUG-JARVIS][BROWSER]",
+      "Pesquisar:", pesquisa,
+      "e clicar:", textoClique
+    );
+
+    falaJarvis(`Pesquisando ${pesquisa} e procurando o link ${textoClique}.`);
+
+    if(!window.JARVIS_BROWSER){
+      console.error("[DEBUG-JARVIS][ERRO] JARVIS_BROWSER não carregado.");
+      falaJarvis("A ponte do navegador não está carregada.");
+      return true;
+    }
+
+    try{
+      estado.textContent = "🌐 Pesquisando no navegador...";
+
+      await JARVIS_BROWSER.google(pesquisa);
+
+      console.log("[DEBUG-JARVIS][OK] Pesquisa aberta:", pesquisa);
+
+      // Dá tempo para a página carregar os resultados.
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      console.log(
+        "[DEBUG-JARVIS][BROWSER] Tentando clicar em:",
+        textoClique
+      );
+
+      await JARVIS_BROWSER.click(textoClique);
+
+      console.log(
+        "[DEBUG-JARVIS][OK] Clique realizado:",
+        textoClique
+      );
+
+      estado.textContent = "✅ Link encontrado e clicado";
+      adicionar(
+        "✅ NAVEGADOR",
+        `Pesquisou "${pesquisa}" e clicou em "${textoClique}".`,
+        "sistema"
+      );
+
+    }catch(erro){
+      console.error(
+        "[DEBUG-JARVIS][ERRO][PESQUISA+CLIQUE]",
+        erro
+      );
+
+      estado.textContent = "❌ Não consegui clicar no link";
+
+      adicionar(
+        "❌ NAVEGADOR",
+        `Erro ao pesquisar/clicar: ${erro.message || erro}`,
+        "sistema"
+      );
+
+      falaJarvis(
+        `Não consegui encontrar ou clicar em ${textoClique}.`
+      );
+    }
+
+    return true;
+  }
+
   // VOLTAR
   if(/^voltar$|^volte$|^voltar página$|^voltar pagina$/.test(t)){
     falaJarvis("Voltando.");
