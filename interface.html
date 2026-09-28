@@ -114,19 +114,25 @@ function falaJarvis(frase){
   speechSynthesis.speak(f);
 }
 
-function processar(comando){
+async function processar(comando){
   const original = String(comando || '').trim();
   const chamouJarvis = /^jarvis(?:\s|[,;:!?]|$)/i.test(original);
   const t = original.toLowerCase().replace(/^\s*jarvis[\s,;:]*/i, '').trim();
+
+  console.log("[DEBUG-JARVIS][OUVIU]", original);
   adicionar("👤 VOCÊ", comando, 'voce');
 
   if(modoDescanso && !chamouJarvis){
+    console.log("[DEBUG-JARVIS][DESCANSO] Ignorando:", original);
     estado.textContent = "😴 Descansando — diga Jarvis para ativar";
     return true;
   }
+
   if(modoDescanso && chamouJarvis){
+    console.log("[DEBUG-JARVIS][ACORDAR]", original);
     modoDescanso = false;
     estado.textContent = "✅ Ativo — estou ouvindo";
+
     if(!t){
       falaJarvis("Estou de volta e ouvindo.");
       return true;
@@ -134,6 +140,7 @@ function processar(comando){
   }
 
   if(/^descansar$|^entrar em descanso$|^ficar em silêncio$|^ficar em silencio$/.test(t)){
+    console.log("[DEBUG-JARVIS][DESCANSAR]");
     modoDescanso = true;
     speechSynthesis.cancel();
     falaEmAndamento = false;
@@ -142,53 +149,201 @@ function processar(comando){
     return true;
   }
 
-  if(t.includes("está me ouvindo") || t.includes("esta me ouvindo") || t.includes("está ouvindo") || t.includes("esta ouvindo") || t === "teste"){
+  if(t.includes("está me ouvindo") || t.includes("esta me ouvindo") ||
+     t.includes("está ouvindo") || t.includes("esta ouvindo") || t === "teste"){
+    console.log("[DEBUG-JARVIS][COMANDO] teste de voz");
     falaJarvis("Sim, estou ouvindo você. Pode perguntar o que quiser.");
     return true;
   }
 
-  // Comandos locais específicos. Perguntas normais continuam indo para a IA.
   if(/^que horas são\??$|^que horas e\??$|^hora\??$/.test(t)){
     const h = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     falaJarvis(`Agora são ${h}, senhor.`);
     return true;
   }
+
   if(/^qual é a data\??$|^qual a data\??$|^que dia é hoje\??$|^que dia e hoje\??$/.test(t)){
-    const d = new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const d = new Date().toLocaleDateString('pt-BR',{
+      weekday:'long',
+      day:'numeric',
+      month:'long',
+      year:'numeric'
+    });
     falaJarvis(`Hoje é ${d}.`);
     return true;
   }
+
+  // =========================================================
+  // NAVEGADOR UNIVERSAL JARVIS
+  // =========================================================
+
+  async function navegadorAcao(nome, fn){
+    console.log("[DEBUG-JARVIS][BROWSER]", nome);
+
+    if(!window.JARVIS_BROWSER){
+      console.error("[DEBUG-JARVIS][ERRO] JARVIS_BROWSER não carregado.");
+      adicionar("❌ ERRO", "Ponte do navegador não carregada.", "sistema");
+      falaJarvis("A ponte do navegador não está carregada.");
+      return true;
+    }
+
+    try{
+      estado.textContent = "🌐 Executando no navegador...";
+      adicionar("🌐 JARVIS", `Executando: ${nome}`, "sistema");
+
+      console.log("[DEBUG-JARVIS][BRIDGE] Chamando ponte local...");
+
+      const resultado = await fn();
+
+      console.log("[DEBUG-JARVIS][OK]", nome, resultado);
+
+      estado.textContent = "✅ Comando executado no navegador";
+      adicionar("✅ NAVEGADOR", `${nome} executado com sucesso.`, "sistema");
+
+      return true;
+    }catch(erro){
+      console.error("[DEBUG-JARVIS][ERRO]", nome, erro);
+
+      estado.textContent = "❌ Erro no navegador";
+      adicionar("❌ NAVEGADOR", `${nome}: ${erro.message || erro}`, "sistema");
+
+      falaJarvis(`Não consegui executar ${nome} no navegador.`);
+      return true;
+    }
+  }
+
+  // GOOGLE
   if(/^abrir google$|^abra o google$/.test(t)){
     falaJarvis("Abrindo o Google.");
-    window.open("https://google.com","_blank");
-    return true;
+    return await navegadorAcao(
+      "abrir Google",
+      () => JARVIS_BROWSER.open("https://www.google.com")
+    );
   }
+
+  // YOUTUBE
   if(/^abrir youtube$|^abra o youtube$/.test(t)){
     falaJarvis("Abrindo o YouTube.");
-    window.open("https://youtube.com","_blank");
-    return true;
+    return await navegadorAcao(
+      "abrir YouTube",
+      () => JARVIS_BROWSER.youtube()
+    );
   }
-  if(/^pesquisar(?: sobre)?\s+(.+)/.test(t)){
-    const termo = t.replace(/^pesquisar(?: sobre)?\s+/i, '').trim();
-    adicionar("🌐", `Pesquisando na web sobre ${termo}.`, 'sistema');
-    consultarInteligencia(`Pesquise na web e responda com informações atuais sobre: ${termo}`, true);
-    return false;
+
+  // MÚSICA
+  if(/^abrir música$|^abrir musica$|^abra música$|^abra musica$/.test(t)){
+    falaJarvis("Abrindo música.");
+    return await navegadorAcao(
+      "abrir música",
+      () => JARVIS_BROWSER.youtube("música")
+    );
   }
+
+  // PESQUISA NO GOOGLE
+  let m = t.match(/^(?:pesquisar|pesquise|buscar|busque|procure)(?:\s+por|\s+sobre)?\s+(.+)$/i);
+
+  if(m){
+    const termo = m[1].trim();
+
+    falaJarvis(`Pesquisando por ${termo}.`);
+
+    return await navegadorAcao(
+      `pesquisar ${termo}`,
+      () => JARVIS_BROWSER.google(termo)
+    );
+  }
+
+  // VOLTAR
+  if(/^voltar$|^volte$|^voltar página$|^voltar pagina$/.test(t)){
+    falaJarvis("Voltando.");
+    return await navegadorAcao(
+      "voltar página",
+      () => JARVIS_BROWSER.back()
+    );
+  }
+
+  // AVANÇAR
+  if(/^avançar$|^avancar$|^avance$/.test(t)){
+    falaJarvis("Avançando.");
+    return await navegadorAcao(
+      "avançar página",
+      () => JARVIS_BROWSER.forward()
+    );
+  }
+
+  // ATUALIZAR
+  if(/^atualizar$|^atualize$|^recarregar$|^recarregue$/.test(t)){
+    falaJarvis("Atualizando a página.");
+    return await navegadorAcao(
+      "atualizar página",
+      () => JARVIS_BROWSER.reload()
+    );
+  }
+
+  // CLICAR
+  m = t.match(/^(?:clique|clicar|clicar em|clique em)\s+(.+)$/i);
+
+  if(m){
+    const texto = m[1].trim();
+
+    falaJarvis(`Clicando em ${texto}.`);
+
+    return await navegadorAcao(
+      `clicar em ${texto}`,
+      () => JARVIS_BROWSER.click(texto)
+    );
+  }
+
+  // DIGITAR
+  m = t.match(/^(?:digite|digitar|escreva|escrever)\s+(.+)$/i);
+
+  if(m){
+    const texto = m[1].trim();
+
+    falaJarvis("Digitando.");
+
+    return await navegadorAcao(
+      "digitar texto",
+      () => JARVIS_BROWSER.type(texto)
+    );
+  }
+
+  // ABRIR LINK / SITE
+  m = t.match(/^(?:abrir|abra|acessar|acesse)\s+(https?:\/\/\S+)$/i);
+
+  if(m){
+    const url = m[1];
+
+    falaJarvis("Abrindo o link.");
+
+    return await navegadorAcao(
+      "abrir link",
+      () => JARVIS_BROWSER.open(url)
+    );
+  }
+
+  // IDENTIDADE
   if(/^quem é você\??$|^quem e voce\??$|^qual seu nome\??$|^qual é o seu nome\??$/.test(t)){
     falaJarvis("Sou Jarvis, seu assistente de inteligência artificial. Pode me fazer perguntas gerais.");
     return true;
   }
+
   if(/^desligar$|^sair$/.test(t)){
     falaJarvis("Desligando. Até logo!");
     return true;
   }
 
-  // Pedidos de programação entram no agente de código; perguntas comuns entram na IA.
+  // PERGUNTA / IA / AGENTE
   const ehCodigo = /\b(código|codigo|gerar código|gerar codigo|programar|programação|programacao|projeto|arquivo|bug|erro|corrija|corrigir|conserte|consertar|implemente|implementar|crie um app|criar um app|gerar app|gere um app|desenvolva|desenvolver|criar site|crie um site|gerar site|gere um site|website|web app|função|funcao|api|backend|frontend|javascript|python|html|css|react|node|npm|git)\b/i.test(t);
+
   const ehPesquisa = /\b(pesquise|pesquisar|pesquisa|busque|buscar|busca|procure|procurar|notícias|noticias|informação atual|informacao atual|agora|hoje)\b/i.test(t);
+
+  console.log("[DEBUG-JARVIS][IA]", comando);
+
   consultarInteligencia(comando, ehCodigo || ehPesquisa);
   return false;
 }
+
 async function consultarInteligencia(comando, agente=false){
   estado.textContent = agente ? "🛠️ Agente trabalhando..." : "🧠 Pensando...";
   try{
