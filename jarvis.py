@@ -28,6 +28,20 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 JARVIS_ELEVENLABS_VOICE_ID = os.getenv("JARVIS_ELEVENLABS_VOICE_ID", "DYpTnojhyMHD94FH6bmF")
 
+JARVIS_ACCESS_KEY = os.getenv("JARVIS_ACCESS_KEY", "")
+
+
+def require_access_key(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not JARVIS_ACCESS_KEY:
+            return jsonify({"error": {"message": "JARVIS_ACCESS_KEY não configurada no Render."}}), 503
+        supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        if not secrets.compare_digest(supplied, JARVIS_ACCESS_KEY):
+            return jsonify({"error": {"message": "Não autorizado."}}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
 
 @app.post("/v1/audio/speech")
 @require_access_key
@@ -68,20 +82,6 @@ def text_to_speech():
     except requests.RequestException:
         app.logger.exception("Falha ao consultar ElevenLabs TTS")
         return jsonify({"error": {"message": "Não foi possível conectar à ElevenLabs."}}), 502
-
-JARVIS_ACCESS_KEY = os.getenv("JARVIS_ACCESS_KEY", "")
-
-
-def require_access_key(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not JARVIS_ACCESS_KEY:
-            return jsonify({"error": {"message": "JARVIS_ACCESS_KEY não configurada no Render."}}), 503
-        supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        if not secrets.compare_digest(supplied, JARVIS_ACCESS_KEY):
-            return jsonify({"error": {"message": "Não autorizado."}}), 401
-        return fn(*args, **kwargs)
-    return wrapper
 
 
 @app.before_request
