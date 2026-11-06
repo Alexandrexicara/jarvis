@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#08111f"><title>Jarvis — Central de Trabalho</title>
+<style>
+:root{color-scheme:dark;--bg:#07101d;--panel:#101d2d;--line:#23364d;--cyan:#53d8ff;--green:#5be3a0;--muted:#9aacc0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#12314a 0,transparent 38%),var(--bg);color:#edf6ff;font:15px system-ui,Arial}
+header{padding:22px max(18px,calc((100% - 1100px)/2));border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:24px;margin:0;letter-spacing:2px}header small{color:var(--muted)}main{max-width:1100px;margin:22px auto;padding:0 16px;display:grid;gap:16px;grid-template-columns:1.2fr .8fr}
+.panel{background:linear-gradient(145deg,#132238,#0d1828);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 12px 32px #0005}
+h2{font-size:17px;margin:0 0 14px}label{display:block;color:var(--muted);font-size:13px;margin:10px 0 6px}
+input,textarea,button{font:inherit}input,textarea{width:100%;background:#081321;border:1px solid #2a4059;border-radius:10px;padding:12px;color:#fff;outline:none}textarea{min-height:95px;resize:vertical}
+button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);color:#06111d;font-weight:700;cursor:pointer;margin-top:10px}button.secondary{background:#20364e;color:#eaf5ff}button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.muted{color:var(--muted)}#status{font-size:13px;color:var(--green)}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#081321;border:1px solid var(--line);padding:12px;border-radius:12px}.stat b{font-size:22px;display:block}.stat span{font-size:12px;color:var(--muted)}
+#chat,#tasks{display:grid;gap:9px;max-height:330px;overflow:auto;margin-top:12px}.msg,.task{padding:11px;border-radius:10px;background:#081321;border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}.msg.user{border-color:#26627c}.task small{color:var(--muted)}.wide{grid-column:1/-1}.hidden{display:none}
+@media(max-width:760px){main{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.wide{grid-column:auto}}
+</style></head><body>
+<header><div><h1>J.A.R.V.I.S</h1><small>Central de trabalho • IA e múltiplas tarefas</small></div><div id="status">● Aguardando conexão</div></header>
+<main>
+<section class="panel wide"><h2>Conectar ao Jarvis</h2><div class="row"><div><label>Endereço da API</label><input id="api" value="https://jarvis-u9jh.onrender.com/v1"></div><div><label>Chave de acesso do Render</label><input id="key" type="password" autocomplete="off" placeholder="Cole sua JARVIS_ACCESS_KEY aqui"></div></div><div class="row"><button id="connect">Testar conexão</button><button class="secondary" id="forget">Limpar chave desta sessão</button></div><small class="muted">A chave fica somente nesta sessão do navegador e não é publicada no site.</small></section>
+<section class="panel"><h2>Conversar com Jarvis</h2><label>Sua mensagem</label><textarea id="prompt" placeholder="Ex.: Planeje uma estratégia para conseguir clientes para meus serviços..."></textarea><button id="send">Enviar mensagem</button><div id="chat"></div></section>
+<section class="panel"><h2>Fila de tarefas</h2><label>Uma tarefa por linha</label><textarea id="batch" placeholder="Pesquisar oportunidades de prestação de serviços&#10;Preparar uma proposta comercial&#10;Criar um plano de divulgação"></textarea><button id="queue">Adicionar tarefas à fila</button><p class="muted">Cada linha vira uma tarefa independente. A execução depende do banco PostgreSQL conectado ao backend.</p></section>
+<section class="panel wide"><div class="row"><h2>Monitor de execução</h2><button class="secondary" id="refresh">Atualizar agora</button></div><div class="stats"><div class="stat"><b id="pending">—</b><span>Pendentes</span></div><div class="stat"><b id="running">—</b><span>Em execução</span></div><div class="stat"><b id="completed">—</b><span>Concluídas</span></div></div><div id="tasks"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let api=localStorage.getItem("jarvis_api")||$("api").value;
+$("api").value=api;$("key").value=sessionStorage.getItem("jarvis_key")||"";
+function auth(){const k=$("key").value.trim();if(!k)throw Error("Cole a chave JARVIS_ACCESS_KEY do Render.");return {Authorization:"Bearer "+k,"Content-Type":"application/json"}}
+function setStatus(s,ok=false){$("status").textContent=(ok?"● ":"● ")+s;$("status").style.color=ok?"#5be3a0":"#ffbd69"}
+async function request(path,opts={}){const base=$("api").value.trim().replace(/\/$/,"");return fetch(base+path,{...opts,headers:{...auth(),...(opts.headers||{})}})}
+$("connect").onclick=async()=>{try{const r=await request("/models");const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);sessionStorage.setItem("jarvis_key",$("key").value.trim());localStorage.setItem("jarvis_api",$("api").value.trim());setStatus("API conectada",true);await refresh()}catch(e){setStatus(e.message)}};
+$("forget").onclick=()=>{sessionStorage.removeItem("jarvis_key");$("key").value="";setStatus("Chave removida desta sessão")};
+$("send").onclick=async()=>{const p=$("prompt").value.trim();if(!p)return;addMsg("Você",p,"user");$("send").disabled=true;try{const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({model:"meta/llama-3.3-70b-instruct",messages:[{role:"user",content:p}],temperature:.3,max_tokens:1200})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);addMsg("Jarvis",j.choices?.[0]?.message?.content||JSON.stringify(j));setStatus("Resposta recebida",true)}catch(e){addMsg("Erro",e.message);setStatus(e.message)}finally{$("send").disabled=false}};
+function addMsg(who,text,cls=""){const d=document.createElement("div");d.className="msg "+cls;d.textContent=who+": "+text;$("chat").prepend(d)}
+$("queue").onclick=async()=>{const lines=$("batch").value.split("\n").map(x=>x.trim()).filter(Boolean);if(!lines.length)return;try{const r=await request("/tasks",{method:"POST",body:JSON.stringify({tasks:lines.map((prompt,i)=>({title:"Tarefa "+(i+1),prompt}))})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("batch").value="";setStatus(j.created+" tarefas adicionadas",true);await refresh()}catch(e){setStatus(e.message)}};
+async function refresh(){try{const [sr,tr]=await Promise.all([request("/tasks/stats"),request("/tasks?limit=50")]);const s=await sr.json(),t=await tr.json();if(!sr.ok)throw Error(s.error?.message||"Banco ainda não configurado");$("pending").textContent=s.pending??0;$("running").textContent=s.running??0;$("completed").textContent=s.completed??0;$("tasks").innerHTML="";(t.tasks||[]).forEach(x=>{const d=document.createElement("div");d.className="task";const title=document.createElement("b");title.textContent=x.title+" — "+x.status;const sm=document.createElement("small");sm.textContent=" • tentativas: "+x.attempts;d.append(title,sm);if(x.error){const p=document.createElement("p");p.textContent=x.error;d.append(p)}$("tasks").append(d)});setStatus("Fila atualizada",true)}catch(e){setStatus(e.message)}}
+$("refresh").onclick=refresh;
+</script></body></html>
