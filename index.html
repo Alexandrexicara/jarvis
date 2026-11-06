@@ -37,7 +37,7 @@ button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);colo
 </style></head><body>
 <header><div><h1>J.A.R.V.I.S</h1><small>Central de trabalho • IA e múltiplas tarefas</small></div><div class="row" style="flex:0 0 auto;align-items:center"><div id="status">● Aguardando conexão</div><button id="voiceToggle" class="voice-toggle">◉ Modo voz</button></div></header>
 <main>
-<section class="panel wide"><h2>Conectar ao Jarvis</h2><div class="row"><div><label>Endereço da API</label><input id="api" value="https://jarvis-u9jh.onrender.com/v1"></div><div><label>Chave de acesso do Render</label><input id="key" type="password" autocomplete="off" placeholder="Cole sua JARVIS_ACCESS_KEY aqui"></div></div><div class="row"><button id="connect">Testar conexão</button><button class="secondary" id="forget">Limpar chave desta sessão</button></div><small class="muted">A chave fica somente nesta sessão do navegador e não é publicada no site.</small></section>
+<section class="panel wide"><h2>Conexão automática</h2><p class="muted">O painel usa a conexão segura do servidor Jarvis. Nenhuma chave de API ou endereço de backend precisa ser digitado aqui.</p></section>
 <section class="panel wide hidden" id="voicePanel">
 <div class="voice-head"><div><h2>Jarvis por voz</h2><small class="muted">ElevenLabs • Kpelo — Natural e Calmo • Português brasileiro</small></div><span class="muted">Diga “Jarvis, pausar” para interromper a escuta</span></div>
 <div class="voice-stage"><div class="orb" id="voiceOrb">J</div></div>
@@ -51,13 +51,11 @@ button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);colo
 <section class="panel wide"><div class="row"><h2>Monitor de execução</h2><button class="secondary" id="pauseTasks">Pausar fila</button><button class="secondary" id="refresh">Atualizar agora</button></div><div class="stats"><div class="stat"><b id="pending">—</b><span>Pendentes</span></div><div class="stat"><b id="running">—</b><span>Em execução</span></div><div class="stat"><b id="completed">—</b><span>Concluídas</span></div></div><div id="tasks"></div></section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let api=localStorage.getItem("jarvis_api")||$("api").value;
-$("api").value=api;$("key").value=sessionStorage.getItem("jarvis_key")||"";
-function auth(){const k=$("key").value.trim();if(!k)throw Error("Cole a chave JARVIS_ACCESS_KEY do Render.");return {Authorization:"Bearer "+k,"Content-Type":"application/json"}}
-function setStatus(s,ok=false){$("status").textContent=(ok?"● ":"● ")+s;$("status").style.color=ok?"#5be3a0":"#ffbd69"}
-async function request(path,opts={}){const base=$("api").value.trim().replace(/\/$/,"");return fetch(base+path,{...opts,headers:{...auth(),...(opts.headers||{})}})}
-$("connect").onclick=async()=>{try{const r=await request("/models");const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);sessionStorage.setItem("jarvis_key",$("key").value.trim());localStorage.setItem("jarvis_api",$("api").value.trim());setStatus("API conectada",true);await refresh()}catch(e){setStatus(e.message)}};
-$("forget").onclick=()=>{sessionStorage.removeItem("jarvis_key");$("key").value="";setStatus("Chave removida desta sessão")};
+const $=id=>document.getElementById(id);
+const API_BASE="https://jarvis-u9jh.onrender.com/v1";
+function setStatus(s,ok=false){$("status").textContent="● "+s;$("status").style.color=ok?"#5be3a0":"#ffbd69"}
+async function request(path,opts={}){return fetch(API_BASE+path,{...opts,headers:{"Content-Type":"application/json",...(opts.headers||{})}})}
+async function connectAutomatically(){try{const r=await request("/models");const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);setStatus("Jarvis conectado automaticamente",true);await refresh()}catch(e){setStatus("Falha na conexão: "+e.message)}}
 $("send").onclick=async()=>{const p=$("prompt").value.trim();if(!p)return;addMsg("Você",p,"user");$("send").disabled=true;try{const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:p}],temperature:.3,max_tokens:1200})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);addMsg("Jarvis",j.choices?.[0]?.message?.content||JSON.stringify(j));setStatus("Resposta recebida",true)}catch(e){addMsg("Erro",e.message);setStatus(e.message)}finally{$("send").disabled=false}};
 function addMsg(who,text,cls=""){const d=document.createElement("div");d.className="msg "+cls;d.textContent=who+": "+text;$("chat").prepend(d)}
 $("queue").onclick=async()=>{const lines=$("batch").value.split("\n").map(x=>x.trim()).filter(Boolean);if(!lines.length)return;try{const r=await request("/tasks",{method:"POST",body:JSON.stringify({tasks:lines.map((prompt,i)=>({title:"Tarefa "+(i+1),prompt}))})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("batch").value="";setStatus(j.created+" tarefas adicionadas",true);await refresh()}catch(e){setStatus(e.message)}};
@@ -126,10 +124,10 @@ $("voiceToggle").onclick=()=>{$("voicePanel").classList.toggle("hidden");$("voic
 $("voiceStart").onclick=async()=>{
   try{
     if(!VoiceRecognition)throw Error("Use Google Chrome ou Microsoft Edge para reconhecimento de voz.");
-    const check=await request("/models");if(!check.ok){const j=await check.json();throw Error(j.error?.message||"Conexão com a API não autorizada");}
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());
     voiceActive=true;$("voiceStart").disabled=true;$("voiceStop").disabled=false;voiceSet("listening","Microfone ativo — pode falar");voiceStartRecognition();
   }catch(e){voiceSet("","Não foi possível iniciar: "+e.message);$("voiceTranscript").textContent=e.message;}
 };
 $("voiceStop").onclick=()=>{voiceActive=false;voiceStopRecognition();if(voiceAudio){voiceAudio.pause();voiceAudio=null;}voiceBusy=false;$("voiceStart").disabled=false;$("voiceStop").disabled=true;voiceSet("","Jarvis pausado");};
+connectAutomatically();
 </script></body></html>
