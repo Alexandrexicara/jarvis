@@ -52,7 +52,32 @@ def init_db():
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS jarvis_tasks_status_created_idx ON jarvis_tasks(status, created_at)")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS jarvis_control (
+                    id SMALLINT PRIMARY KEY CHECK (id = 1),
+                    tasks_paused BOOLEAN NOT NULL DEFAULT FALSE,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            conn.execute("INSERT INTO jarvis_control (id, tasks_paused) VALUES (1, FALSE) ON CONFLICT (id) DO NOTHING")
         _initialized = True
+
+
+def get_tasks_paused():
+    init_db()
+    with _connect() as conn:
+        row = conn.execute("SELECT tasks_paused FROM jarvis_control WHERE id=1").fetchone()
+    return bool(row["tasks_paused"]) if row else False
+
+
+def set_tasks_paused(paused):
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "UPDATE jarvis_control SET tasks_paused=%s, updated_at=NOW() WHERE id=1 RETURNING tasks_paused",
+            (bool(paused),)
+        ).fetchone()
+    return bool(row["tasks_paused"]) if row else False
 
 
 def enqueue_tasks(items):
@@ -156,6 +181,9 @@ def _run_task(task):
 def _worker_loop():
     while True:
         try:
+            if get_tasks_paused():
+                time.sleep(POLL_SECONDS)
+                continue
             task = _claim_task()
             if not task:
                 time.sleep(POLL_SECONDS)
@@ -206,4 +234,5 @@ def task_stats():
     for row in rows:
         stats[row["status"]] = row["total"]
     stats["total"] = sum(stats.values())
+    stats["paused"] = get_tasks_paused()
     return stats
