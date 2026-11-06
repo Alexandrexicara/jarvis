@@ -6,7 +6,7 @@ import requests
 from flask import Flask, jsonify, request
 
 from task_queue import (
-    cancel_task, enqueue_tasks, get_task, get_tasks, start_workers, task_stats
+    cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
 )
 
 app = Flask(__name__)
@@ -163,6 +163,22 @@ def create_tasks():
     except Exception as exc:
         app.logger.exception("Falha ao adicionar tarefas")
         return jsonify({"error": {"message": str(exc)}}), 503
+
+
+@app.route("/v1/tasks/control", methods=["GET", "POST"])
+@require_access_key
+def task_control():
+    if request.method == "GET":
+        return jsonify({"paused": get_tasks_paused()})
+    body = request.get_json(silent=True) or {}
+    paused = body.get("paused")
+    if not isinstance(paused, bool):
+        return jsonify({"error": {"message": "Envie paused como true ou false."}}), 400
+    current = set_tasks_paused(paused)
+    return jsonify({
+        "paused": current,
+        "message": "Fila pausada. As tarefas pendentes aguardam." if current else "Fila retomada. O Jarvis voltou a processar as tarefas."
+    })
 
 
 @app.get("/v1/tasks")
