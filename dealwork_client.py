@@ -50,7 +50,17 @@ def _request(method, path, *, params=None, payload=None):
         raise DealworkError(f"Dealwork HTTP {response.status_code}: {message}")
     return data
 
-def register_routes(app, require_access_key):
+def register_routes(app, require_access_key, require_frontend=None):
+    if require_frontend:
+        @app.get("/v1/voice/dealwork/jobs")
+        @require_frontend
+        def voice_dealwork_jobs():
+            try:
+                result = _request("GET", "/jobs", params={"page": 1, "per_page": 5})
+                return jsonify(result)
+            except DealworkError as exc:
+                return jsonify({"error": {"message": str(exc)}}), 502
+
     @app.get("/v1/dealwork/status")
     @require_access_key
     def dealwork_status():
