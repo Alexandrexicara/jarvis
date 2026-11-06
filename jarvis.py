@@ -5,6 +5,9 @@ from functools import wraps
 import requests
 from flask import Flask, Response, jsonify, request
 
+
+from dealwork_client import register_routes as register_dealwork_routes
+
 from task_queue import (
     cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
 )
@@ -273,6 +276,8 @@ def task_cancel(task_id):
     except Exception as exc:
         return jsonify({"error": {"message": str(exc)}}), 503
 
+
+register_dealwork_routes(app, require_access_key)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
