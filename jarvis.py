@@ -24,6 +24,51 @@ def add_cors_headers(response):
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+JARVIS_ELEVENLABS_VOICE_ID = os.getenv("JARVIS_ELEVENLABS_VOICE_ID", "DYpTnojhyMHD94FH6bmF")
+
+
+@app.post("/v1/audio/speech")
+@require_access_key
+def text_to_speech():
+    if not ELEVENLABS_API_KEY:
+        return jsonify({"error": {"message": "ELEVENLABS_API_KEY não configurada no Render."}}), 503
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("input") or body.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": {"message": "Informe o texto em 'input'."}}), 400
+    if len(text) > 5000:
+        return jsonify({"error": {"message": "O texto deve ter no máximo 5.000 caracteres."}}), 400
+    try:
+        upstream = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{JARVIS_ELEVENLABS_VOICE_ID}",
+            params={"output_format": "mp3_44100_128"},
+            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+            json={
+                "text": text,
+                "model_id": "eleven_flash_v2_5",
+                "language_code": "pt",
+                "voice_settings": {
+                    "stability": 0.62,
+                    "similarity_boost": 0.82,
+                    "style": 0.25,
+                    "use_speaker_boost": True
+                }
+            },
+            timeout=60
+        )
+        if not upstream.ok:
+            app.logger.warning("ElevenLabs TTS retornou HTTP %s", upstream.status_code)
+            return jsonify({"error": {"message": "A ElevenLabs recusou a geração de voz (HTTP %s)." % upstream.status_code}}), 502
+        return (upstream.content, 200, {
+            "Content-Type": "audio/mpeg",
+            "Cache-Control": "no-store"
+        })
+    except requests.RequestException:
+        app.logger.exception("Falha ao consultar ElevenLabs TTS")
+        return jsonify({"error": {"message": "Não foi possível conectar à ElevenLabs."}}), 502
+
 JARVIS_ACCESS_KEY = os.getenv("JARVIS_ACCESS_KEY", "")
 
 
