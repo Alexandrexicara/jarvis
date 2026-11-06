@@ -1,5 +1,7 @@
 import os
 import secrets
+import time
+from collections import defaultdict, deque
 from functools import wraps
 
 import requests
@@ -14,13 +16,40 @@ from task_queue import (
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+FRONTEND_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.getenv("JARVIS_FRONTEND_ORIGINS", "https://jarvis-br.netlify.app").split(",")
+    if origin.strip()
+}
+_FRONTEND_REQUESTS = defaultdict(deque)
+
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
-    response.headers["Access-Control-Max-Age"] = "86400"
+    origin = request.headers.get("Origin", "").rstrip("/")
+    if origin in FRONTEND_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+        response.headers["Access-Control-Max-Age"] = "86400"
     return response
+
+def require_frontend(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        origin = request.headers.get("Origin", "").rstrip("/")
+        if origin not in FRONTEND_ORIGINS:
+            return jsonify({"error": {"message": "Origem do painel Jarvis não autorizada."}}), 403
+        now = time.time()
+        client = request.remote_addr or "unknown"
+        recent = _FRONTEND_REQUESTS[client]
+        while recent and now - recent[0] > 60:
+            recent.popleft()
+        if len(recent) >= 60:
+            return jsonify({"error": {"message": "Muitas solicitações. Aguarde um minuto."}}), 429
+        recent.append(now)
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
@@ -44,47 +73,6 @@ def require_access_key(fn):
             return jsonify({"error": {"message": "Não autorizado."}}), 401
         return fn(*args, **kwargs)
     return wrapper
-
-
-@app.post("/v1/audio/speech")
-@require_access_key
-def text_to_speech():
-    if not ELEVENLABS_API_KEY:
-        return jsonify({"error": {"message": "ELEVENLABS_API_KEY não configurada no Render."}}), 503
-    body = request.get_json(silent=True) or {}
-    text = str(body.get("input") or body.get("text") or "").strip()
-    if not text:
-        return jsonify({"error": {"message": "Informe o texto em 'input'."}}), 400
-    if len(text) > 5000:
-        return jsonify({"error": {"message": "O texto deve ter no máximo 5.000 caracteres."}}), 400
-    try:
-        upstream = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
-            params={"output_format": "mp3_44100_128"},
-            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-            json={
-                "text": text,
-                "model_id": "eleven_multilingual_v2",
-                "language_code": "pt",
-                "voice_settings": {
-                    "stability": 0.62,
-                    "similarity_boost": 0.82,
-                    "style": 0.25,
-                    "use_speaker_boost": True
-                }
-            },
-            timeout=60
-        )
-        if not upstream.ok:
-            app.logger.warning("ElevenLabs TTS retornou HTTP %s", upstream.status_code)
-            return jsonify({"error": {"message": "A ElevenLabs recusou a geração de voz (HTTP %s)." % upstream.status_code}}), 502
-        return (upstream.content, 200, {
-            "Content-Type": "audio/mpeg",
-            "Cache-Control": "no-store"
-        })
-    except requests.RequestException:
-        app.logger.exception("Falha ao consultar ElevenLabs TTS")
-        return jsonify({"error": {"message": "Não foi possível conectar à ElevenLabs."}}), 502
 
 
 @app.before_request
@@ -113,13 +101,13 @@ def health():
 
 
 @app.get("/v1/models")
-@require_access_key
+@require_frontend
 def models():
     return jsonify({"object": "list", "data": [{"id": NVIDIA_MODEL, "object": "model", "owned_by": "nvidia-nim"}]})
 
 
 @app.post("/v1/chat/completions")
-@require_access_key
+@require_frontend
 def chat_completions():
     if not NVIDIA_API_KEY:
         return jsonify({"error": {"message": "NVIDIA_API_KEY não configurada no Render."}}), 503
@@ -147,7 +135,7 @@ def chat_completions():
 
 
 @app.post("/v1/audio/speech")
-@require_access_key
+@require_frontend
 def audio_speech():
     if not ELEVENLABS_API_KEY:
         return jsonify({"error": {"message": "ELEVENLABS_API_KEY não configurada no Render."}}), 503
@@ -180,7 +168,7 @@ def audio_speech():
 
 
 @app.post("/v1/tasks/control")
-@require_access_key
+@require_frontend
 def control_tasks():
     body = request.get_json(silent=True) or {}
     if "paused" not in body or not isinstance(body["paused"], bool):
@@ -197,7 +185,7 @@ def control_tasks():
 
 
 @app.post("/v1/tasks")
-@require_access_key
+@require_frontend
 def create_tasks():
     body = request.get_json(silent=True) or {}
     items = body.get("tasks")
@@ -219,7 +207,7 @@ def create_tasks():
 
 
 @app.route("/v1/tasks/control", methods=["GET", "POST"])
-@require_access_key
+@require_frontend
 def task_control():
     if request.method == "GET":
         return jsonify({"paused": get_tasks_paused()})
@@ -235,7 +223,7 @@ def task_control():
 
 
 @app.get("/v1/tasks")
-@require_access_key
+@require_frontend
 def list_tasks():
     try:
         limit = request.args.get("limit", "100")
@@ -248,7 +236,7 @@ def list_tasks():
 
 
 @app.get("/v1/tasks/stats")
-@require_access_key
+@require_frontend
 def tasks_stats():
     try:
         return jsonify(task_stats())
@@ -257,7 +245,7 @@ def tasks_stats():
 
 
 @app.get("/v1/tasks/<task_id>")
-@require_access_key
+@require_frontend
 def task_detail(task_id):
     try:
         task = get_task(task_id)
@@ -267,7 +255,7 @@ def task_detail(task_id):
 
 
 @app.delete("/v1/tasks/<task_id>")
-@require_access_key
+@require_frontend
 def task_cancel(task_id):
     try:
         cancelled = cancel_task(task_id)
