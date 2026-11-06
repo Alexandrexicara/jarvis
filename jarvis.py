@@ -5,17 +5,22 @@ from functools import wraps
 import requests
 from flask import Flask, jsonify, request
 
+from task_queue import (
+    cancel_task, enqueue_tasks, get_task, get_tasks, start_workers, task_stats
+)
+
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 JARVIS_ACCESS_KEY = os.getenv("JARVIS_ACCESS_KEY", "")
 
+
 def require_access_key(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        # Require a private key for all AI endpoints; health stays public for Render.
         if not JARVIS_ACCESS_KEY:
             return jsonify({"error": {"message": "JARVIS_ACCESS_KEY não configurada no Render."}}), 503
         supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
@@ -24,35 +29,47 @@ def require_access_key(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+
+@app.before_request
+def boot_task_workers():
+    if request.path.startswith("/v1/tasks"):
+        try:
+            start_workers()
+        except Exception:
+            app.logger.exception("Não foi possível iniciar os workers de tarefas")
+
+
 @app.get("/")
 def index():
     return jsonify({
         "name": "Jarvis Free AI Bridge",
         "status": "online",
         "compatible": "OpenAI-compatible API (OpenClaw/custom provider)",
-        "endpoints": ["/api/health", "/v1/models", "/v1/chat/completions"]
+        "features": ["chat completions", "persistent multi-task queue", "parallel workers"],
+        "endpoints": ["/api/health", "/v1/models", "/v1/chat/completions", "/v1/tasks", "/v1/tasks/<id>", "/v1/tasks/stats"]
     })
+
 
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "jarvis-free-ai-bridge"})
+
 
 @app.get("/v1/models")
 @require_access_key
 def models():
     return jsonify({"object": "list", "data": [{"id": NVIDIA_MODEL, "object": "model", "owned_by": "nvidia-nim"}]})
 
+
 @app.post("/v1/chat/completions")
 @require_access_key
 def chat_completions():
     if not NVIDIA_API_KEY:
         return jsonify({"error": {"message": "NVIDIA_API_KEY não configurada no Render."}}), 503
-
     body = request.get_json(silent=True) or {}
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         return jsonify({"error": {"message": "Envie messages como uma lista não vazia."}}), 400
-
     payload = {
         "model": body.get("model") or NVIDIA_MODEL,
         "messages": messages,
@@ -67,10 +84,74 @@ def chat_completions():
             json=payload,
             timeout=120
         )
-        content_type = upstream.headers.get("Content-Type", "application/json")
-        return (upstream.content, upstream.status_code, {"Content-Type": content_type})
+        return (upstream.content, upstream.status_code, {"Content-Type": upstream.headers.get("Content-Type", "application/json")})
     except requests.RequestException as exc:
         return jsonify({"error": {"message": f"Falha ao consultar NVIDIA NIM: {str(exc)}"}}), 502
+
+
+@app.post("/v1/tasks")
+@require_access_key
+def create_tasks():
+    body = request.get_json(silent=True) or {}
+    items = body.get("tasks")
+    if items is None:
+        items = [body]
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": {"message": "Envie uma tarefa ou uma lista em 'tasks'."}}), 400
+    if len(items) > 500:
+        return jsonify({"error": {"message": "Máximo de 500 tarefas por envio. Você pode enviar novos lotes depois."}}), 400
+    try:
+        created = enqueue_tasks(items)
+        start_workers()
+        return jsonify({"created": len(created), "tasks": created}), 202
+    except ValueError as exc:
+        return jsonify({"error": {"message": str(exc)}}), 400
+    except Exception as exc:
+        app.logger.exception("Falha ao adicionar tarefas")
+        return jsonify({"error": {"message": str(exc)}}), 503
+
+
+@app.get("/v1/tasks")
+@require_access_key
+def list_tasks():
+    try:
+        limit = request.args.get("limit", "100")
+        status = request.args.get("status")
+        if status and status not in {"pending", "running", "completed", "failed", "cancelled"}:
+            return jsonify({"error": {"message": "Status inválido."}}), 400
+        return jsonify({"tasks": get_tasks(limit, status)})
+    except Exception as exc:
+        return jsonify({"error": {"message": str(exc)}}), 503
+
+
+@app.get("/v1/tasks/stats")
+@require_access_key
+def tasks_stats():
+    try:
+        return jsonify(task_stats())
+    except Exception as exc:
+        return jsonify({"error": {"message": str(exc)}}), 503
+
+
+@app.get("/v1/tasks/<task_id>")
+@require_access_key
+def task_detail(task_id):
+    try:
+        task = get_task(task_id)
+        return (jsonify(task), 200) if task else (jsonify({"error": {"message": "Tarefa não encontrada."}}), 404)
+    except Exception as exc:
+        return jsonify({"error": {"message": str(exc)}}), 503
+
+
+@app.delete("/v1/tasks/<task_id>")
+@require_access_key
+def task_cancel(task_id):
+    try:
+        cancelled = cancel_task(task_id)
+        return jsonify({"cancelled": cancelled, "message": "Tarefa cancelada." if cancelled else "Só é possível cancelar tarefas pendentes."})
+    except Exception as exc:
+        return jsonify({"error": {"message": str(exc)}}), 503
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
