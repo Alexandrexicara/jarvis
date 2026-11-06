@@ -157,6 +157,20 @@ def audio_speech():
             params={"output_format": "mp3_44100_128"},
             timeout=90
         )
+        if not upstream.ok:
+            try:
+                upstream_error = upstream.json()
+            except ValueError:
+                upstream_error = {"message": upstream.text[:1200]}
+            detail = upstream_error.get("detail") if isinstance(upstream_error, dict) else None
+            err = upstream_error.get("error") if isinstance(upstream_error, dict) else None
+            if isinstance(err, dict):
+                detail = detail or err.get("message") or err.get("detail") or err.get("code")
+            elif isinstance(err, str):
+                detail = detail or err
+            detail = detail or (upstream_error.get("message") if isinstance(upstream_error, dict) else None) or "A ElevenLabs recusou a solicitação sem informar detalhes."
+            app.logger.error("ElevenLabs HTTP %s: %s", upstream.status_code, str(detail)[:1200])
+            return jsonify({"error": {"message": f"ElevenLabs HTTP {upstream.status_code}: {str(detail)[:900]}", "provider_status": upstream.status_code}}), upstream.status_code
         return Response(
             upstream.content,
             status=upstream.status_code,
