@@ -14,13 +14,32 @@ input,textarea,button{font:inherit}input,textarea{width:100%;background:#081321;
 button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);color:#06111d;font-weight:700;cursor:pointer;margin-top:10px}button.secondary{background:#20364e;color:#eaf5ff}button:disabled{opacity:.5;cursor:wait}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.muted{color:var(--muted)}#status{font-size:13px;color:var(--green)}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#081321;border:1px solid var(--line);padding:12px;border-radius:12px}.stat b{font-size:22px;display:block}.stat span{font-size:12px;color:var(--muted)}
 #chat,#tasks{display:grid;gap:9px;max-height:330px;overflow:auto;margin-top:12px}.msg,.task{padding:11px;border-radius:10px;background:#081321;border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}.msg.user{border-color:#26627c}.task small{color:var(--muted)}.wide{grid-column:1/-1}.hidden{display:none}
+
+.voice-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.voice-stage{min-height:280px;display:grid;place-items:center;position:relative;overflow:hidden;border-radius:18px;background:radial-gradient(ellipse at center,#12354a 0,#091625 55%,#081321 100%);border:1px solid #1e3a52;margin:12px 0}
+.voice-stage:before,.voice-stage:after{content:"";position:absolute;width:230px;height:230px;border:1px solid #35cfff55;border-radius:50%;animation:radar 5s linear infinite}
+.voice-stage:after{width:285px;height:285px;animation-duration:8s;animation-direction:reverse}
+.orb{z-index:1;width:158px;height:158px;border-radius:50%;display:grid;place-items:center;font-size:48px;font-weight:300;letter-spacing:4px;color:#b9f3ff;border:2px solid #56dcff;background:radial-gradient(circle at 35% 30%,#28708b,#0a263b 60%,#061321);box-shadow:0 0 18px #35cfff,0 0 55px #087da966,inset 0 0 25px #43d7ff55;animation:orbIdle 3.2s ease-in-out infinite}
+.orb.listening{border-color:#5be3a0;box-shadow:0 0 22px #5be3a0,0 0 75px #21c87888,inset 0 0 32px #5be3a066;animation:orbListen 1.1s ease-in-out infinite}
+.orb.thinking{border-color:#b69cff;box-shadow:0 0 22px #b69cff,0 0 75px #8d6aff88,inset 0 0 32px #b69cff66;animation:orbThink 1.8s linear infinite}
+.orb.speaking{border-color:#53d8ff;box-shadow:0 0 25px #53d8ff,0 0 90px #22bfff99,inset 0 0 35px #53d8ff77;animation:orbSpeak .32s ease-in-out infinite alternate}
+.voice-status{text-align:center;color:var(--cyan);font-weight:650;letter-spacing:.4px;min-height:24px}
+.voice-transcript{background:#081321;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:82px;white-space:pre-wrap;line-height:1.55}
+.voice-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+@keyframes radar{to{transform:rotate(360deg) scale(1.05);opacity:.35}}
+@keyframes orbIdle{0%,100%{transform:scale(.97);filter:brightness(.9)}50%{transform:scale(1.03);filter:brightness(1.2)}}
+@keyframes orbListen{0%,100%{transform:scale(.96)}50%{transform:scale(1.09)}}
+@keyframes orbThink{to{transform:rotate(360deg) scale(1.04)}}
+@keyframes orbSpeak{from{transform:scale(.95)}to{transform:scale(1.08)}}
+@media(prefers-reduced-motion:reduce){.orb,.voice-stage:before,.voice-stage:after{animation:none}}
+
 @media(max-width:760px){main{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.wide{grid-column:auto}}
 </style></head><body>
 <header><div><h1>J.A.R.V.I.S</h1><small>Central de trabalho • IA e múltiplas tarefas</small></div><div class="row" style="flex:0 0 auto;align-items:center"><div id="status">● Aguardando conexão</div><button id="voiceToggle" class="voice-toggle">◉ Modo voz</button></div></header>
 <main>
 <section class="panel wide"><h2>Conectar ao Jarvis</h2><div class="row"><div><label>Endereço da API</label><input id="api" value="https://jarvis-u9jh.onrender.com/v1"></div><div><label>Chave de acesso do Render</label><input id="key" type="password" autocomplete="off" placeholder="Cole sua JARVIS_ACCESS_KEY aqui"></div></div><div class="row"><button id="connect">Testar conexão</button><button class="secondary" id="forget">Limpar chave desta sessão</button></div><small class="muted">A chave fica somente nesta sessão do navegador e não é publicada no site.</small></section>
 <section class="panel wide hidden" id="voicePanel">
-<div class="voice-head"><div><h2>Jarvis por voz</h2><small class="muted">ElevenLabs • Andre W. • Português brasileiro</small></div><span class="muted">Diga “Jarvis, pausar” para interromper a escuta</span></div>
+<div class="voice-head"><div><h2>Jarvis por voz</h2><small class="muted">ElevenLabs • Kpelo — Natural e Calmo • Português brasileiro</small></div><span class="muted">Diga “Jarvis, pausar” para interromper a escuta</span></div>
 <div class="voice-stage"><div class="orb" id="voiceOrb">J</div></div>
 <p class="voice-status" id="voiceStatus">Pronto para iniciar</p>
 <div class="voice-transcript" id="voiceTranscript">Toque em “Iniciar escuta” e fale naturalmente.</div>
