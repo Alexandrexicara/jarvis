@@ -264,7 +264,7 @@ def task_cancel(task_id):
         return jsonify({"error": {"message": str(exc)}}), 503
 
 
-register_dealwork_routes(app, require_access_key)
+register_dealwork_routes(app, require_access_key, require_frontend)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
