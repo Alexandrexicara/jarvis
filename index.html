@@ -16,9 +16,17 @@ button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);colo
 #chat,#tasks{display:grid;gap:9px;max-height:330px;overflow:auto;margin-top:12px}.msg,.task{padding:11px;border-radius:10px;background:#081321;border:1px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}.msg.user{border-color:#26627c}.task small{color:var(--muted)}.wide{grid-column:1/-1}.hidden{display:none}
 @media(max-width:760px){main{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.wide{grid-column:auto}}
 </style></head><body>
-<header><div><h1>J.A.R.V.I.S</h1><small>Central de trabalho • IA e múltiplas tarefas</small></div><div id="status">● Aguardando conexão</div></header>
+<header><div><h1>J.A.R.V.I.S</h1><small>Central de trabalho • IA e múltiplas tarefas</small></div><div class="row" style="flex:0 0 auto;align-items:center"><div id="status">● Aguardando conexão</div><button id="voiceToggle" class="voice-toggle">◉ Modo voz</button></div></header>
 <main>
 <section class="panel wide"><h2>Conectar ao Jarvis</h2><div class="row"><div><label>Endereço da API</label><input id="api" value="https://jarvis-u9jh.onrender.com/v1"></div><div><label>Chave de acesso do Render</label><input id="key" type="password" autocomplete="off" placeholder="Cole sua JARVIS_ACCESS_KEY aqui"></div></div><div class="row"><button id="connect">Testar conexão</button><button class="secondary" id="forget">Limpar chave desta sessão</button></div><small class="muted">A chave fica somente nesta sessão do navegador e não é publicada no site.</small></section>
+<section class="panel wide hidden" id="voicePanel">
+<div class="voice-head"><div><h2>Jarvis por voz</h2><small class="muted">ElevenLabs • Andre W. • Português brasileiro</small></div><span class="muted">Diga “Jarvis, pausar” para interromper a escuta</span></div>
+<div class="voice-stage"><div class="orb" id="voiceOrb">J</div></div>
+<p class="voice-status" id="voiceStatus">Pronto para iniciar</p>
+<div class="voice-transcript" id="voiceTranscript">Toque em “Iniciar escuta” e fale naturalmente.</div>
+<div class="voice-actions"><button id="voiceStart">🎙 Iniciar escuta</button><button id="voiceStop" class="secondary" disabled>⏸ Pausar Jarvis</button></div>
+<p class="muted" style="text-align:center;margin-top:12px">A escuta contínua funciona enquanto esta página estiver aberta e o navegador mantiver a permissão do microfone. O painel de trabalho continua disponível abaixo.</p>
+</section>
 <section class="panel"><h2>Conversar com Jarvis</h2><label>Sua mensagem</label><textarea id="prompt" placeholder="Ex.: Planeje uma estratégia para conseguir clientes para meus serviços..."></textarea><button id="send">Enviar mensagem</button><div id="chat"></div></section>
 <section class="panel"><h2>Fila de tarefas</h2><label>Uma tarefa por linha</label><textarea id="batch" placeholder="Pesquisar oportunidades de prestação de serviços&#10;Preparar uma proposta comercial&#10;Criar um plano de divulgação"></textarea><button id="queue">Adicionar tarefas à fila</button><p class="muted">Cada linha vira uma tarefa independente. A execução depende do banco PostgreSQL conectado ao backend.</p></section>
 <section class="panel wide"><div class="row"><h2>Monitor de execução</h2><button class="secondary" id="refresh">Atualizar agora</button></div><div class="stats"><div class="stat"><b id="pending">—</b><span>Pendentes</span></div><div class="stat"><b id="running">—</b><span>Em execução</span></div><div class="stat"><b id="completed">—</b><span>Concluídas</span></div></div><div id="tasks"></div></section>
@@ -31,9 +39,63 @@ function setStatus(s,ok=false){$("status").textContent=(ok?"● ":"● ")+s;$("s
 async function request(path,opts={}){const base=$("api").value.trim().replace(/\/$/,"");return fetch(base+path,{...opts,headers:{...auth(),...(opts.headers||{})}})}
 $("connect").onclick=async()=>{try{const r=await request("/models");const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);sessionStorage.setItem("jarvis_key",$("key").value.trim());localStorage.setItem("jarvis_api",$("api").value.trim());setStatus("API conectada",true);await refresh()}catch(e){setStatus(e.message)}};
 $("forget").onclick=()=>{sessionStorage.removeItem("jarvis_key");$("key").value="";setStatus("Chave removida desta sessão")};
-$("send").onclick=async()=>{const p=$("prompt").value.trim();if(!p)return;addMsg("Você",p,"user");$("send").disabled=true;try{const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({model:"meta/llama-3.3-70b-instruct",messages:[{role:"user",content:p}],temperature:.3,max_tokens:1200})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);addMsg("Jarvis",j.choices?.[0]?.message?.content||JSON.stringify(j));setStatus("Resposta recebida",true)}catch(e){addMsg("Erro",e.message);setStatus(e.message)}finally{$("send").disabled=false}};
+$("send").onclick=async()=>{const p=$("prompt").value.trim();if(!p)return;addMsg("Você",p,"user");$("send").disabled=true;try{const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:p}],temperature:.3,max_tokens:1200})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);addMsg("Jarvis",j.choices?.[0]?.message?.content||JSON.stringify(j));setStatus("Resposta recebida",true)}catch(e){addMsg("Erro",e.message);setStatus(e.message)}finally{$("send").disabled=false}};
 function addMsg(who,text,cls=""){const d=document.createElement("div");d.className="msg "+cls;d.textContent=who+": "+text;$("chat").prepend(d)}
 $("queue").onclick=async()=>{const lines=$("batch").value.split("\n").map(x=>x.trim()).filter(Boolean);if(!lines.length)return;try{const r=await request("/tasks",{method:"POST",body:JSON.stringify({tasks:lines.map((prompt,i)=>({title:"Tarefa "+(i+1),prompt}))})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("batch").value="";setStatus(j.created+" tarefas adicionadas",true);await refresh()}catch(e){setStatus(e.message)}};
 async function refresh(){try{const [sr,tr]=await Promise.all([request("/tasks/stats"),request("/tasks?limit=50")]);const s=await sr.json(),t=await tr.json();if(!sr.ok)throw Error(s.error?.message||"Banco ainda não configurado");$("pending").textContent=s.pending??0;$("running").textContent=s.running??0;$("completed").textContent=s.completed??0;$("tasks").innerHTML="";(t.tasks||[]).forEach(x=>{const d=document.createElement("div");d.className="task";const title=document.createElement("b");title.textContent=x.title+" — "+x.status;const sm=document.createElement("small");sm.textContent=" • tentativas: "+x.attempts;d.append(title,sm);if(x.error){const p=document.createElement("p");p.textContent=x.error;d.append(p)}$("tasks").append(d)});setStatus("Fila atualizada",true)}catch(e){setStatus(e.message)}}
 $("refresh").onclick=refresh;
+
+const VoiceRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+let voiceActive=false,voiceBusy=false,voiceRecognition=null,voiceAudio=null;
+function voiceSet(state,message){$("voiceOrb").className="orb"+(state?" "+state:"");$("voiceStatus").textContent=message;}
+function voiceStopRecognition(){if(voiceRecognition){try{voiceRecognition.onend=null;voiceRecognition.stop()}catch{}voiceRecognition=null;}}
+function voiceStartRecognition(){
+  if(!voiceActive||voiceBusy||!VoiceRecognition)return;
+  voiceStopRecognition();
+  const rec=new VoiceRecognition();voiceRecognition=rec;rec.lang="pt-BR";rec.continuous=true;rec.interimResults=false;
+  rec.onstart=()=>voiceSet("listening","🎙 Ouvindo continuamente…");
+  rec.onresult=e=>{const result=e.results[e.results.length-1];if(result&&result.isFinal)voiceHandle(result[0].transcript);};
+  rec.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted"){$("voiceTranscript").textContent="Falha no microfone: "+e.error;voiceSet("","Verifique a permissão do microfone");}};
+  rec.onend=()=>{if(voiceRecognition===rec)voiceRecognition=null;if(voiceActive&&!voiceBusy)setTimeout(voiceStartRecognition,450);};
+  try{rec.start()}catch{setTimeout(voiceStartRecognition,700);}
+}
+async function voiceSpeak(text){
+  voiceBusy=true;voiceStopRecognition();voiceSet("speaking","🔊 Jarvis está falando…");
+  try{
+    const r=await request("/audio/speech",{method:"POST",body:JSON.stringify({input:text})});
+    if(!r.ok){let j={};try{j=await r.json()}catch{}throw Error(j.error?.message||"Falha no serviço de voz ElevenLabs (HTTP "+r.status+")");}
+    const blob=await r.blob();const url=URL.createObjectURL(blob);voiceAudio=new Audio(url);
+    await new Promise((resolve,reject)=>{voiceAudio.onended=resolve;voiceAudio.onerror=()=>reject(Error("Não foi possível reproduzir o áudio"));voiceAudio.play().catch(reject);});
+    URL.revokeObjectURL(url);
+  }catch(e){$("voiceTranscript").textContent+="\n\nVoz ElevenLabs: "+e.message;voiceSet("","Voz indisponível — confira ELEVENLABS_API_KEY no Render");}
+  finally{voiceBusy=false;if(voiceActive)voiceStartRecognition();else voiceSet("","Jarvis pausado");}
+}
+async function voiceHandle(raw){
+  const phrase=String(raw||"").trim();if(!phrase||voiceBusy)return;
+  $("voiceTranscript").textContent="Você: "+phrase;
+  const normalized=phrase.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  if(/\b(pausar jarvis|jarvis pausar|parar escuta|desativar microfone|jarvis descansar)\b/.test(normalized)){
+    voiceActive=false;voiceStopRecognition();$("voiceStart").disabled=false;$("voiceStop").disabled=true;voiceSet("","Jarvis pausado por comando de voz");$("voiceTranscript").textContent+="\nJarvis: Escuta pausada. Para voltar, toque em Iniciar escuta.";return;
+  }
+  if(/\b(modo painel|abrir painel de trabalho)\b/.test(normalized)){$("voicePanel").classList.add("hidden");$("voiceToggle").textContent="◉ Modo voz";return;}
+  const message=phrase.replace(/^\s*jarvis[\s,;:!?-]*/i,"").trim()||phrase;
+  voiceBusy=true;voiceStopRecognition();voiceSet("thinking","🧠 Jarvis está processando…");
+  try{
+    const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:message}],temperature:.3,max_tokens:1200})});
+    const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);
+    const answer=j.choices?.[0]?.message?.content||"Não recebi uma resposta do modelo.";
+    $("voiceTranscript").textContent="Você: "+phrase+"\n\nJarvis: "+answer;
+    voiceBusy=false;await voiceSpeak(answer);
+  }catch(e){voiceBusy=false;$("voiceTranscript").textContent+="\n\nErro: "+e.message;voiceSet("","Não consegui acessar o Jarvis");if(voiceActive)voiceStartRecognition();}
+}
+$("voiceToggle").onclick=()=>{$("voicePanel").classList.toggle("hidden");$("voiceToggle").textContent=$("voicePanel").classList.contains("hidden")?"◉ Modo voz":"▣ Voltar ao painel";};
+$("voiceStart").onclick=async()=>{
+  try{
+    if(!VoiceRecognition)throw Error("Use Google Chrome ou Microsoft Edge para reconhecimento de voz.");
+    const check=await request("/models");if(!check.ok){const j=await check.json();throw Error(j.error?.message||"Conexão com a API não autorizada");}
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());
+    voiceActive=true;$("voiceStart").disabled=true;$("voiceStop").disabled=false;voiceSet("listening","Microfone ativo — pode falar");voiceStartRecognition();
+  }catch(e){voiceSet("","Não foi possível iniciar: "+e.message);$("voiceTranscript").textContent=e.message;}
+};
+$("voiceStop").onclick=()=>{voiceActive=false;voiceStopRecognition();if(voiceAudio){voiceAudio.pause();voiceAudio=null;}voiceBusy=false;$("voiceStart").disabled=false;$("voiceStop").disabled=true;voiceSet("","Jarvis pausado");};
 </script></body></html>
