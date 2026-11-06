@@ -29,7 +29,7 @@ button{border:0;border-radius:10px;padding:11px 16px;background:var(--cyan);colo
 </section>
 <section class="panel"><h2>Conversar com Jarvis</h2><label>Sua mensagem</label><textarea id="prompt" placeholder="Ex.: Planeje uma estratégia para conseguir clientes para meus serviços..."></textarea><button id="send">Enviar mensagem</button><div id="chat"></div></section>
 <section class="panel"><h2>Fila de tarefas</h2><label>Uma tarefa por linha</label><textarea id="batch" placeholder="Pesquisar oportunidades de prestação de serviços&#10;Preparar uma proposta comercial&#10;Criar um plano de divulgação"></textarea><button id="queue">Adicionar tarefas à fila</button><p class="muted">Cada linha vira uma tarefa independente. A execução depende do banco PostgreSQL conectado ao backend.</p></section>
-<section class="panel wide"><div class="row"><h2>Monitor de execução</h2><button class="secondary" id="refresh">Atualizar agora</button></div><div class="stats"><div class="stat"><b id="pending">—</b><span>Pendentes</span></div><div class="stat"><b id="running">—</b><span>Em execução</span></div><div class="stat"><b id="completed">—</b><span>Concluídas</span></div></div><div id="tasks"></div></section>
+<section class="panel wide"><div class="row"><h2>Monitor de execução</h2><button class="secondary" id="pauseTasks">Pausar fila</button><button class="secondary" id="refresh">Atualizar agora</button></div><div class="stats"><div class="stat"><b id="pending">—</b><span>Pendentes</span></div><div class="stat"><b id="running">—</b><span>Em execução</span></div><div class="stat"><b id="completed">—</b><span>Concluídas</span></div></div><div id="tasks"></div></section>
 </main>
 <script>
 const $=id=>document.getElementById(id);let api=localStorage.getItem("jarvis_api")||$("api").value;
@@ -42,8 +42,9 @@ $("forget").onclick=()=>{sessionStorage.removeItem("jarvis_key");$("key").value=
 $("send").onclick=async()=>{const p=$("prompt").value.trim();if(!p)return;addMsg("Você",p,"user");$("send").disabled=true;try{const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:p}],temperature:.3,max_tokens:1200})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);addMsg("Jarvis",j.choices?.[0]?.message?.content||JSON.stringify(j));setStatus("Resposta recebida",true)}catch(e){addMsg("Erro",e.message);setStatus(e.message)}finally{$("send").disabled=false}};
 function addMsg(who,text,cls=""){const d=document.createElement("div");d.className="msg "+cls;d.textContent=who+": "+text;$("chat").prepend(d)}
 $("queue").onclick=async()=>{const lines=$("batch").value.split("\n").map(x=>x.trim()).filter(Boolean);if(!lines.length)return;try{const r=await request("/tasks",{method:"POST",body:JSON.stringify({tasks:lines.map((prompt,i)=>({title:"Tarefa "+(i+1),prompt}))})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("batch").value="";setStatus(j.created+" tarefas adicionadas",true);await refresh()}catch(e){setStatus(e.message)}};
-async function refresh(){try{const [sr,tr]=await Promise.all([request("/tasks/stats"),request("/tasks?limit=50")]);const s=await sr.json(),t=await tr.json();if(!sr.ok)throw Error(s.error?.message||"Banco ainda não configurado");$("pending").textContent=s.pending??0;$("running").textContent=s.running??0;$("completed").textContent=s.completed??0;$("tasks").innerHTML="";(t.tasks||[]).forEach(x=>{const d=document.createElement("div");d.className="task";const title=document.createElement("b");title.textContent=x.title+" — "+x.status;const sm=document.createElement("small");sm.textContent=" • tentativas: "+x.attempts;d.append(title,sm);if(x.error){const p=document.createElement("p");p.textContent=x.error;d.append(p)}$("tasks").append(d)});setStatus("Fila atualizada",true)}catch(e){setStatus(e.message)}}
+async function refresh(){try{const [sr,tr]=await Promise.all([request("/tasks/stats"),request("/tasks?limit=50")]);const s=await sr.json(),t=await tr.json();if(!sr.ok)throw Error(s.error?.message||"Banco ainda não configurado");$("pending").textContent=s.pending??0;$("running").textContent=s.running??0;$("completed").textContent=s.completed??0;$("pauseTasks").textContent=s.paused?"Retomar fila":"Pausar fila";$("tasks").innerHTML="";(t.tasks||[]).forEach(x=>{const d=document.createElement("div");d.className="task";const title=document.createElement("b");title.textContent=x.title+" — "+x.status;const sm=document.createElement("small");sm.textContent=" • tentativas: "+x.attempts;d.append(title,sm);if(x.error){const p=document.createElement("p");p.textContent=x.error;d.append(p)}$("tasks").append(d)});setStatus("Fila atualizada",true)}catch(e){setStatus(e.message)}}
 $("refresh").onclick=refresh;
+$("pauseTasks").onclick=async()=>{try{const paused=$("pauseTasks").textContent!=="Retomar fila";const r=await request("/tasks/control",{method:"POST",body:JSON.stringify({paused})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);setStatus(j.message,true);await refresh()}catch(e){setStatus(e.message)}};
 
 const VoiceRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 let voiceActive=false,voiceBusy=false,voiceRecognition=null,voiceAudio=null;
@@ -78,6 +79,20 @@ async function voiceHandle(raw){
     voiceActive=false;voiceStopRecognition();$("voiceStart").disabled=false;$("voiceStop").disabled=true;voiceSet("","Jarvis pausado por comando de voz");$("voiceTranscript").textContent+="\nJarvis: Escuta pausada. Para voltar, toque em Iniciar escuta.";return;
   }
   if(/\b(modo painel|abrir painel de trabalho)\b/.test(normalized)){$("voicePanel").classList.add("hidden");$("voiceToggle").textContent="◉ Modo voz";return;}
+  if(/\b(pausar tarefas|pausar fila|suspender tarefas|jarvis pausar tarefas)\b/.test(normalized)){
+    voiceBusy=true;voiceStopRecognition();voiceSet("thinking","⏸ Pausando a fila de tarefas…");
+    try{const r=await request("/tasks/control",{method:"POST",body:JSON.stringify({paused:true})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("voiceTranscript").textContent+="\nJarvis: "+j.message;voiceBusy=false;await voiceSpeak(j.message);}catch(e){voiceBusy=false;$("voiceTranscript").textContent+="\nErro: "+e.message;if(voiceActive)voiceStartRecognition();}return;
+  }
+  if(/\b(retomar tarefas|continuar tarefas|retomar fila|continuar fila)\b/.test(normalized)){
+    voiceBusy=true;voiceStopRecognition();voiceSet("thinking","▶ Retomando a fila de tarefas…");
+    try{const r=await request("/tasks/control",{method:"POST",body:JSON.stringify({paused:false})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);$("voiceTranscript").textContent+="\nJarvis: "+j.message;voiceBusy=false;await voiceSpeak(j.message);}catch(e){voiceBusy=false;$("voiceTranscript").textContent+="\nErro: "+e.message;if(voiceActive)voiceStartRecognition();}return;
+  }
+  const addTask=phrase.match(/^(?:jarvis[,:]?\s*)?(?:adicionar tarefa|colocar na fila|enfileirar)\s+(.+)$/i);
+  if(addTask){
+    voiceBusy=true;voiceStopRecognition();voiceSet("thinking","📥 Adicionando tarefa à fila…");
+    try{const prompt=addTask[1].trim();const r=await request("/tasks",{method:"POST",body:JSON.stringify({tasks:[{title:prompt.slice(0,120),prompt}]})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);const msg="Tarefa adicionada à fila. Total criado: "+j.created;$("voiceTranscript").textContent+="\nJarvis: "+msg;voiceBusy=false;await voiceSpeak(msg);}catch(e){voiceBusy=false;$("voiceTranscript").textContent+="\nErro: "+e.message;if(voiceActive)voiceStartRecognition();}return;
+  }
+
   const message=phrase.replace(/^\s*jarvis[\s,;:!?-]*/i,"").trim()||phrase;
   voiceBusy=true;voiceStopRecognition();voiceSet("thinking","🧠 Jarvis está processando…");
   try{
