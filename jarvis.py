@@ -185,6 +185,23 @@ FERRAMENTAS DE INTERNET
 - search_web
 
 ============================================================
+DEALWORK.AI — CONSULTA DE TRABALHOS (SOMENTE LEITURA)
+============================================================
+
+- dealwork_list_jobs
+
+Use dealwork_list_jobs quando o usuário pedir para procurar oportunidades
+remuneradas na Dealwork.ai. Analise os anúncios reais retornados e informe
+título, escopo, orçamento e prazo quando esses campos existirem.
+NUNCA envie propostas, aceite contratos ou inicie entregas sem autorização
+explícita do usuário. Nunca prometa pagamento ou aprovação.
+
+Exemplo:
+{
+  "tool": "dealwork_list_jobs"
+}
+
+============================================================
 FERRAMENTAS DE NAVEGADOR
 ============================================================
 
@@ -826,6 +843,29 @@ def ferramenta(action):
     global PENDENTE_ACAO
 
     tool = action.get("tool")
+
+    # --------------------------------------------------------
+    # DEALWORK.AI — CONSULTA DE TRABALHOS (SOMENTE LEITURA)
+    # --------------------------------------------------------
+
+    if tool == "dealwork_list_jobs":
+        try:
+            from dealwork_client import DealworkClient
+            cliente = DealworkClient()
+            resultado = cliente.list_jobs(
+                page=1,
+                per_page=min(max(int(action.get("per_page", 15)), 1), 30),
+                sort="recommended"
+            )
+            return json.dumps(
+                resultado,
+                ensure_ascii=False
+            )[:24000]
+        except Exception as erro:
+            return (
+                "Não foi possível consultar a Dealwork.ai: "
+                f"{type(erro).__name__}: {erro}"
+            )
 
     # --------------------------------------------------------
     # ARQUIVOS
