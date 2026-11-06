@@ -134,6 +134,40 @@ def chat_completions():
         return jsonify({"error": {"message": f"Falha ao consultar NVIDIA NIM: {str(exc)}"}}), 502
 
 
+def _elevenlabs_male_voice_candidates(api_key):
+    """Lista somente vozes masculinas que a própria chave consegue acessar."""
+    candidates = []
+    seen = set()
+    headers = {"xi-api-key": api_key, "Accept": "application/json"}
+    endpoints = (
+        "https://api.elevenlabs.io/v2/voices?voice_type=non-community&page_size=100&include_total_count=false",
+        "https://api.elevenlabs.io/v2/voices?voice_type=default&page_size=100&include_total_count=false",
+    )
+    for endpoint in endpoints:
+        try:
+            listed = requests.get(endpoint, headers=headers, timeout=20)
+            if not listed.ok:
+                app.logger.warning("ElevenLabs voice discovery HTTP %s", listed.status_code)
+                continue
+            for voice in listed.json().get("voices", []):
+                voice_id = str(voice.get("voice_id") or "").strip()
+                labels = voice.get("labels") or {}
+                gender = str(labels.get("gender") or "").strip().lower()
+                if not voice_id or voice_id in seen or gender not in ("male", "masculine"):
+                    continue
+                seen.add(voice_id)
+                candidates.append({
+                    "id": voice_id,
+                    "name": str(voice.get("name") or voice_id),
+                    "category": str(voice.get("category") or ""),
+                })
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            app.logger.warning("ElevenLabs voice discovery failed: %s", str(exc)[:300])
+    # Vozes geradas/da própria conta vêm antes das vozes padrão.
+    candidates.sort(key=lambda item: 0 if item["category"] == "generated" else 1)
+    return candidates
+
+
 @app.post("/v1/audio/speech")
 @require_frontend
 def audio_speech():
@@ -145,40 +179,48 @@ def audio_speech():
         return jsonify({"error": {"message": "Envie o texto em 'input'."}}), 400
     if len(text) > 5000:
         return jsonify({"error": {"message": "O texto excede o limite de 5.000 caracteres por fala."}}), 413
-    try:
-        upstream = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
-            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg"},
-            json={
-                "text": text,
-                "model_id": "eleven_multilingual_v2",
-                "voice_settings": {"stability": 0.52, "similarity_boost": 0.78, "style": 0.25, "use_speaker_boost": True}
-            },
-            params={"output_format": "mp3_44100_128"},
-            timeout=90
-        )
-        if not upstream.ok:
+
+    candidates = _elevenlabs_male_voice_candidates(ELEVENLABS_API_KEY)
+    if not candidates:
+        return jsonify({"error": {"message": "A chave ElevenLabs não retornou nenhuma voz masculina liberada para uso pela API. O Jarvis deve usar a voz masculina alternativa do navegador."}}), 503
+
+    last_status = 402
+    last_detail = "Nenhuma voz masculina disponível foi aceita pela ElevenLabs."
+    for candidate in candidates:
+        try:
+            upstream = requests.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{candidate['id']}",
+                headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg"},
+                json={
+                    "text": text,
+                    "model_id": "eleven_multilingual_v2",
+                    "voice_settings": {"stability": 0.52, "similarity_boost": 0.78, "style": 0.25, "use_speaker_boost": True}
+                },
+                params={"output_format": "mp3_44100_128"},
+                timeout=90
+            )
+            if upstream.ok and upstream.content:
+                app.logger.info("ElevenLabs TTS success with accessible male voice: %s", candidate["name"])
+                return Response(upstream.content, status=200, content_type=upstream.headers.get("Content-Type", "audio/mpeg"))
+            last_status = upstream.status_code
             try:
-                upstream_error = upstream.json()
+                error_data = upstream.json()
             except ValueError:
-                upstream_error = {"message": upstream.text[:1200]}
-            detail = upstream_error.get("detail") if isinstance(upstream_error, dict) else None
-            err = upstream_error.get("error") if isinstance(upstream_error, dict) else None
-            if isinstance(err, dict):
-                detail = detail or err.get("message") or err.get("detail") or err.get("code")
-            elif isinstance(err, str):
-                detail = detail or err
-            detail = detail or (upstream_error.get("message") if isinstance(upstream_error, dict) else None) or "A ElevenLabs recusou a solicitação sem informar detalhes."
-            app.logger.error("ElevenLabs HTTP %s: %s", upstream.status_code, str(detail)[:1200])
-            return jsonify({"error": {"message": f"ElevenLabs HTTP {upstream.status_code}: {str(detail)[:900]}", "provider_status": upstream.status_code}}), upstream.status_code
-        return Response(
-            upstream.content,
-            status=upstream.status_code,
-            content_type=upstream.headers.get("Content-Type", "audio/mpeg")
-        )
-    except requests.RequestException as exc:
-        app.logger.exception("Falha na síntese ElevenLabs")
-        return jsonify({"error": {"message": f"Falha ao gerar voz ElevenLabs: {str(exc)}"}}), 502
+                error_data = {"message": upstream.text[:500]}
+            detail = error_data.get("detail") if isinstance(error_data, dict) else None
+            if isinstance(detail, dict):
+                detail = detail.get("message") or detail.get("status")
+            last_detail = str(detail or error_data.get("message") or "A ElevenLabs recusou esta voz.")[:500]
+            app.logger.warning("ElevenLabs voice %s unavailable (HTTP %s): %s", candidate["name"], last_status, last_detail)
+            # 402/404/422 podem indicar voz não liberada ou incompatível; testar a próxima.
+            if last_status not in (402, 404, 422):
+                break
+        except requests.RequestException as exc:
+            last_status = 502
+            last_detail = str(exc)[:500]
+            app.logger.warning("ElevenLabs request failed for %s: %s", candidate["name"], last_detail)
+
+    return jsonify({"error": {"message": "Não encontrei uma voz masculina da ElevenLabs liberada para esta chave. " + last_detail, "provider_status": last_status}}), 502 if last_status not in (402, 404, 422) else 503
 
 
 @app.post("/v1/tasks/control")
