@@ -15,3 +15,7 @@ services:
         value: https://integrate.api.nvidia.com/v1
       - key: JARVIS_ACCESS_KEY
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: JARVIS_WORKER_THREADS
+        value: "2"
