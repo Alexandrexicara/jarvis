@@ -27,19 +27,18 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "8BWp4523yEDDjOJi73mz")
 
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
-JARVIS_ELEVENLABS_VOICE_ID = os.getenv("JARVIS_ELEVENLABS_VOICE_ID", "DYpTnojhyMHD94FH6bmF")
-
 JARVIS_ACCESS_KEY = os.getenv("JARVIS_ACCESS_KEY", "")
+JARVIS_PROXY_KEY = os.getenv("JARVIS_PROXY_KEY", "")
 
 
 def require_access_key(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not JARVIS_ACCESS_KEY:
-            return jsonify({"error": {"message": "JARVIS_ACCESS_KEY não configurada no Render."}}), 503
+        valid_keys = [key for key in (JARVIS_ACCESS_KEY, JARVIS_PROXY_KEY) if key]
+        if not valid_keys:
+            return jsonify({"error": {"message": "Nenhuma chave interna configurada no Render."}}), 503
         supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-        if not secrets.compare_digest(supplied, JARVIS_ACCESS_KEY):
+        if not any(secrets.compare_digest(supplied, key) for key in valid_keys):
             return jsonify({"error": {"message": "Não autorizado."}}), 401
         return fn(*args, **kwargs)
     return wrapper
@@ -58,12 +57,12 @@ def text_to_speech():
         return jsonify({"error": {"message": "O texto deve ter no máximo 5.000 caracteres."}}), 400
     try:
         upstream = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{JARVIS_ELEVENLABS_VOICE_ID}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
             params={"output_format": "mp3_44100_128"},
             headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
             json={
                 "text": text,
-                "model_id": "eleven_flash_v2_5",
+                "model_id": "eleven_multilingual_v2",
                 "language_code": "pt",
                 "voice_settings": {
                     "stability": 0.62,
