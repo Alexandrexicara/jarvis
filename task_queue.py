@@ -128,7 +128,7 @@ def _claim_task():
             UPDATE jarvis_tasks
             SET status='running', started_at=NOW(), attempts=attempts+1, error=NULL
             WHERE id=(SELECT id FROM next_task)
-            RETURNING id, title, messages
+            RETURNING id, title, messages, attempts
         """).fetchone()
     return dict(row) if row else None
 
@@ -169,10 +169,16 @@ def _worker_loop():
                     )
             except Exception as exc:
                 with _connect() as conn:
-                    conn.execute(
-                        "UPDATE jarvis_tasks SET status='failed', error=%s, finished_at=NOW() WHERE id=%s AND status='running'",
-                        (str(exc)[:4000], task["id"])
-                    )
+                    if task["attempts"] < 3:
+                        conn.execute(
+                            "UPDATE jarvis_tasks SET status='pending', error=%s, started_at=NULL WHERE id=%s AND status='running'",
+                            (f"Tentativa {task['attempts']} falhou; nova tentativa será feita: {str(exc)[:3500]}", task["id"])
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE jarvis_tasks SET status='failed', error=%s, finished_at=NOW() WHERE id=%s AND status='running'",
+                            (str(exc)[:4000], task["id"])
+                        )
         except Exception:
             time.sleep(max(POLL_SECONDS, 5))
 
