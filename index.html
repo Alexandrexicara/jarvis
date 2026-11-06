@@ -78,7 +78,7 @@ function voiceStartRecognition(){
   try{rec.start()}catch{setTimeout(voiceStartRecognition,700);}
 }
 function cleanSpeechText(value){
-  return String(value||"").replace(/<[^>]*>/g," ").replace(/\\*\\*(.*?)\\*\\*/g,"$1").replace(/[*_~`#]/g,"").replace(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/gu,"").replace(/\\s+/g," ").trim();
+  return String(value||"").replace(/<[^>]*>/g," ").replace(/\*\*(.*?)\*\*/g,"$1").replace(/[*_~`#]/g,"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,"").replace(/\s+/g," ").trim();
 }
 async function voiceSpeak(text){
   voiceBusy=true;voiceStopRecognition();voiceSet("speaking","Jarvis falando");
@@ -90,7 +90,7 @@ async function voiceSpeak(text){
     await new Promise((resolve,reject)=>{voiceAudio.onended=resolve;voiceAudio.onerror=()=>reject(Error("Não foi possível reproduzir o áudio ElevenLabs"));voiceAudio.play().catch(reject);});
     URL.revokeObjectURL(url);
   }catch(e){
-    $("voiceTranscript").textContent+="\\nVoz ElevenLabs indisponível: "+e.message;
+    $("voiceTranscript").textContent+="\nVoz ElevenLabs indisponível: "+e.message;
   }
   finally{voiceBusy=false;if(voiceActive)voiceStartRecognition();else voiceSet("","Jarvis pausado");}
 }
