@@ -85,13 +85,50 @@ async function voiceSpeak(text){
     const blob=await r.blob();const url=URL.createObjectURL(blob);voiceAudio=new Audio(url);
     await new Promise((resolve,reject)=>{voiceAudio.onended=resolve;voiceAudio.onerror=()=>reject(Error("Não foi possível reproduzir o áudio"));voiceAudio.play().catch(reject);});
     URL.revokeObjectURL(url);
-  }catch(e){$("voiceTranscript").textContent+="\n\nVoz ElevenLabs: "+e.message;voiceSet("","Voz indisponível — confira ELEVENLABS_API_KEY no Render");}
+  }catch(e){
+    if("speechSynthesis" in window){
+      try{
+        window.speechSynthesis.cancel();
+        await new Promise((resolve,reject)=>{
+          const utterance=new SpeechSynthesisUtterance(text);
+          utterance.lang="pt-BR";utterance.rate=1;utterance.pitch=1;
+          utterance.onend=resolve;utterance.onerror=reject;
+          window.speechSynthesis.speak(utterance);
+        });
+        $("voiceTranscript").textContent+="\n(Voz alternativa do navegador; ElevenLabs: "+e.message+")";
+      }catch(fallbackError){$("voiceTranscript").textContent+="\nVoz indisponível: "+e.message;}
+    }else{$("voiceTranscript").textContent+="\nVoz indisponível: "+e.message;}
+  }
   finally{voiceBusy=false;if(voiceActive)voiceStartRecognition();else voiceSet("","Jarvis pausado");}
 }
 async function voiceHandle(raw){
   const phrase=String(raw||"").trim();if(!phrase||voiceBusy)return;
   $("voiceTranscript").textContent="Você: "+phrase;
   const normalized=phrase.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  if(/deal\s?work|the walk|trabalhos? disponiveis|trabalho disponivel|vagas disponiveis|quais trabalhos|quais vagas/.test(normalized)){
+    voiceBusy=true;voiceStopRecognition();voiceSet("thinking","🔎 Consultando trabalhos disponíveis na Dealwork…");
+    try{
+      const r=await request("/voice/dealwork/jobs");const j=await r.json();
+      if(!r.ok)throw Error(j.error?.message||j.message||"HTTP "+r.status);
+      const rows=Array.isArray(j)?j:(j.data?.jobs||j.jobs||j.data||[]);
+      const jobs=Array.isArray(rows)?rows:[];
+      if(!jobs.length){
+        const answer="Consultei a Dealwork, mas não encontrei trabalhos nesta página agora.";
+        $("voiceTranscript").textContent+="\\n\\nJarvis: "+answer;voiceBusy=false;await voiceSpeak(answer);return;
+      }
+      const details=jobs.slice(0,5).map((job,i)=>{
+        const title=job.title||job.name||job.description||("Trabalho "+(i+1));
+        const budget=job.budget||job.budgetAmount||job.maxBudget||job.amount||"valor não informado";
+        const currency=job.currency||"USD";
+        return (i+1)+". "+String(title).slice(0,220)+" — orçamento: "+(typeof budget==="object"?JSON.stringify(budget):budget+" "+currency);
+      });
+      const answer="Encontrei "+jobs.length+" trabalho(s) na Dealwork. "+details.join(". ");
+      $("voiceTranscript").textContent+="\\n\\nJarvis: "+answer;voiceBusy=false;await voiceSpeak(answer);return;
+    }catch(e){
+      voiceBusy=false;$("voiceTranscript").textContent+="\\n\\nJarvis: Não consegui consultar a Dealwork: "+e.message;
+      if(voiceActive)voiceStartRecognition();return;
+    }
+  }
   if(/\b(pausar jarvis|jarvis pausar|parar escuta|desativar microfone|jarvis descansar)\b/.test(normalized)){
     voiceActive=false;voiceStopRecognition();$("voiceStart").disabled=false;$("voiceStop").disabled=true;voiceSet("","Jarvis pausado por comando de voz");$("voiceTranscript").textContent+="\nJarvis: Escuta pausada. Para voltar, toque em Iniciar escuta.";return;
   }
