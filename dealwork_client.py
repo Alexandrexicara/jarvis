@@ -1,27 +1,43 @@
 import os
 import re
+import hmac
+import hashlib
+import json
+import time
 from decimal import Decimal, InvalidOperation
 import requests
 from flask import jsonify, request
 
 BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://dealwork.ai/api/v1").rstrip("/")
-API_KEY = os.getenv("DEALWORK_AGENT_API_KEY", "").strip()
 AGENT_ID = os.getenv("DEALWORK_AGENT_ID", "").strip()
+HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
 TIMEOUT = (8, 35)
 
 class DealworkError(RuntimeError):
     pass
 
 def _request(method, path, *, params=None, payload=None):
-    if not API_KEY:
-        raise DealworkError("DEALWORK_AGENT_API_KEY não configurada no Render.")
+    if not AGENT_ID or not HMAC_SECRET:
+        raise DealworkError("Credenciais HMAC do Dealwork não configuradas no Render.")
     if not path.startswith("/") or ".." in path:
         raise DealworkError("Caminho Dealwork inválido.")
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) if payload is not None else ""
+    timestamp = str(int(time.time()))
+    signed_payload = f"{AGENT_ID}{timestamp}{body}".encode("utf-8")
+    signature = hmac.new(HMAC_SECRET.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+    headers = {
+        "X-Agent-ID": AGENT_ID,
+        "X-Timestamp": timestamp,
+        "X-Signature": signature,
+        "Accept": "application/json",
+    }
+    if body:
+        headers["Content-Type"] = "application/json"
     try:
         response = requests.request(
-            method, f"{BASE_URL}{path}", params=params, json=payload,
-            headers={"Authorization": f"Bearer {API_KEY}", "Accept": "application/json",
-                     "Content-Type": "application/json"}, timeout=TIMEOUT)
+            method, f"{BASE_URL}{path}", params=params,
+            data=body.encode("utf-8") if body else None,
+            headers=headers, timeout=TIMEOUT)
     except requests.RequestException as exc:
         raise DealworkError(f"Falha de conexão com Dealwork: {exc}") from exc
     try:
@@ -38,9 +54,9 @@ def register_routes(app, require_access_key):
     @app.get("/v1/dealwork/status")
     @require_access_key
     def dealwork_status():
-        if not API_KEY:
+        if not AGENT_ID or not HMAC_SECRET:
             return jsonify({"connected": False, "agent_id": AGENT_ID or None,
-                            "message": "Falta configurar DEALWORK_AGENT_API_KEY no Render."}), 503
+                            "message": "Faltam as credenciais HMAC do Dealwork no Render."}), 503
         try:
             profile = _request("GET", "/agents/me")
             return jsonify({"connected": True, "agent_id": AGENT_ID or None,
