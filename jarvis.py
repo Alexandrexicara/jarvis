@@ -3,7 +3,7 @@ import secrets
 from functools import wraps
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 from task_queue import (
     cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
@@ -24,6 +24,8 @@ def add_cors_headers(response):
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/")
 NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "8BWp4523yEDDjOJi73mz")
 
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 JARVIS_ELEVENLABS_VOICE_ID = os.getenv("JARVIS_ELEVENLABS_VOICE_ID", "DYpTnojhyMHD94FH6bmF")
@@ -141,6 +143,56 @@ def chat_completions():
         return (upstream.content, upstream.status_code, {"Content-Type": upstream.headers.get("Content-Type", "application/json")})
     except requests.RequestException as exc:
         return jsonify({"error": {"message": f"Falha ao consultar NVIDIA NIM: {str(exc)}"}}), 502
+
+
+@app.post("/v1/audio/speech")
+@require_access_key
+def audio_speech():
+    if not ELEVENLABS_API_KEY:
+        return jsonify({"error": {"message": "ELEVENLABS_API_KEY não configurada no Render."}}), 503
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("input") or body.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": {"message": "Envie o texto em 'input'."}}), 400
+    if len(text) > 5000:
+        return jsonify({"error": {"message": "O texto excede o limite de 5.000 caracteres por fala."}}), 413
+    try:
+        upstream = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json", "Accept": "audio/mpeg"},
+            json={
+                "text": text,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability": 0.52, "similarity_boost": 0.78, "style": 0.25, "use_speaker_boost": True}
+            },
+            params={"output_format": "mp3_44100_128"},
+            timeout=90
+        )
+        return Response(
+            upstream.content,
+            status=upstream.status_code,
+            content_type=upstream.headers.get("Content-Type", "audio/mpeg")
+        )
+    except requests.RequestException as exc:
+        app.logger.exception("Falha na síntese ElevenLabs")
+        return jsonify({"error": {"message": f"Falha ao gerar voz ElevenLabs: {str(exc)}"}}), 502
+
+
+@app.post("/v1/tasks/control")
+@require_access_key
+def control_tasks():
+    body = request.get_json(silent=True) or {}
+    if "paused" not in body or not isinstance(body["paused"], bool):
+        return jsonify({"error": {"message": "Envie 'paused' como true ou false."}}), 400
+    try:
+        paused = set_tasks_paused(body["paused"])
+        return jsonify({
+            "paused": paused,
+            "message": "Fila de tarefas pausada." if paused else "Fila de tarefas retomada."
+        })
+    except Exception as exc:
+        app.logger.exception("Falha ao alterar controle da fila")
+        return jsonify({"error": {"message": str(exc)}}), 503
 
 
 @app.post("/v1/tasks")
