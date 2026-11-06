@@ -51,6 +51,40 @@ def _request(method, path, *, params=None, payload=None):
     return data
 
 def register_routes(app, require_access_key, require_frontend=None):
+    # Dealwork webhook receiver. The URL token is a dedicated secret; it is
+    # intentionally separate from the outbound API HMAC secret.
+    webhook_token = os.getenv("DEALWORK_WEBHOOK_TOKEN", "").strip()
+    webhook_events = []
+    webhook_lock = __import__("threading").Lock()
+
+    @app.post("/v1/dealwork/webhook/<token>")
+    def dealwork_webhook_receive(token):
+        if not webhook_token or not hmac.compare_digest(token, webhook_token):
+            return jsonify({"error": {"message": "Webhook não autorizado."}}), 401
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": {"message": "Payload JSON inválido."}}), 400
+        event_name = payload.get("event") or payload.get("type") or payload.get("eventType")
+        with webhook_lock:
+            webhook_events.append({
+                "receivedAt": int(time.time()),
+                "event": str(event_name or "unknown")[:120],
+                "payload": payload
+            })
+            del webhook_events[:-500]
+        app.logger.info("Dealwork webhook recebido: %s", str(event_name or "unknown")[:120])
+        return jsonify({"received": True}), 202
+
+    @app.get("/v1/dealwork/webhook/events")
+    @require_access_key
+    def dealwork_webhook_events():
+        try:
+            limit = max(1, min(int(request.args.get("limit", "50")), 100))
+        except ValueError:
+            return jsonify({"error": {"message": "limit inválido."}}), 400
+        with webhook_lock:
+            return jsonify({"events": webhook_events[-limit:], "count": len(webhook_events)})
+
     if require_frontend:
         @app.get("/v1/voice/dealwork/jobs")
         @require_frontend
