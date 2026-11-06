@@ -77,27 +77,20 @@ function voiceStartRecognition(){
   rec.onend=()=>{if(voiceRecognition===rec)voiceRecognition=null;if(voiceActive&&!voiceBusy)setTimeout(voiceStartRecognition,450);};
   try{rec.start()}catch{setTimeout(voiceStartRecognition,700);}
 }
+function cleanSpeechText(value){
+  return String(value||"").replace(/<[^>]*>/g," ").replace(/\\*\\*(.*?)\\*\\*/g,"$1").replace(/[*_~`#]/g,"").replace(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/gu,"").replace(/\\s+/g," ").trim();
+}
 async function voiceSpeak(text){
-  voiceBusy=true;voiceStopRecognition();voiceSet("speaking","🔊 Jarvis está falando…");
+  voiceBusy=true;voiceStopRecognition();voiceSet("speaking","Jarvis falando");
+  const spoken=cleanSpeechText(text);
   try{
-    const r=await request("/audio/speech",{method:"POST",body:JSON.stringify({input:text})});
-    if(!r.ok){let j={};try{j=await r.json()}catch{}throw Error(j.error?.message||"Falha no serviço de voz ElevenLabs (HTTP "+r.status+")");}
+    const r=await request("/audio/speech",{method:"POST",body:JSON.stringify({input:spoken})});
+    if(!r.ok){let j={};try{j=await r.json()}catch{}throw Error(j.error?.message||"ElevenLabs HTTP "+r.status);}
     const blob=await r.blob();const url=URL.createObjectURL(blob);voiceAudio=new Audio(url);
-    await new Promise((resolve,reject)=>{voiceAudio.onended=resolve;voiceAudio.onerror=()=>reject(Error("Não foi possível reproduzir o áudio"));voiceAudio.play().catch(reject);});
+    await new Promise((resolve,reject)=>{voiceAudio.onended=resolve;voiceAudio.onerror=()=>reject(Error("Não foi possível reproduzir o áudio ElevenLabs"));voiceAudio.play().catch(reject);});
     URL.revokeObjectURL(url);
   }catch(e){
-    if("speechSynthesis" in window){
-      try{
-        window.speechSynthesis.cancel();
-        await new Promise((resolve,reject)=>{
-          const utterance=new SpeechSynthesisUtterance(text);
-          utterance.lang="pt-BR";utterance.rate=1;utterance.pitch=1;
-          utterance.onend=resolve;utterance.onerror=reject;
-          window.speechSynthesis.speak(utterance);
-        });
-        $("voiceTranscript").textContent+="\n(Voz alternativa do navegador; ElevenLabs: "+e.message+")";
-      }catch(fallbackError){$("voiceTranscript").textContent+="\nVoz indisponível: "+e.message;}
-    }else{$("voiceTranscript").textContent+="\nVoz indisponível: "+e.message;}
+    $("voiceTranscript").textContent+="\\nVoz ElevenLabs indisponível: "+e.message;
   }
   finally{voiceBusy=false;if(voiceActive)voiceStartRecognition();else voiceSet("","Jarvis pausado");}
 }
@@ -150,7 +143,7 @@ async function voiceHandle(raw){
   const message=phrase.replace(/^\s*jarvis[\s,;:!?-]*/i,"").trim()||phrase;
   voiceBusy=true;voiceStopRecognition();voiceSet("thinking","🧠 Jarvis está processando…");
   try{
-    const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"user",content:message}],temperature:.3,max_tokens:1200})});
+    const r=await request("/chat/completions",{method:"POST",body:JSON.stringify({messages:[{role:"system",content:"Você é Jarvis, assistente pessoal do usuário. Converse em português brasileiro natural, como numa conversa normal entre duas pessoas. Responda diretamente e com frases simples. Não use emojis, não descreva gestos ou ações físicas, não diga que está acenando, sorrindo ou fazendo movimentos, não use narração teatral, não use saudações longas nem frases prontas como 'à disposição'. Não fale sobre si mesmo em terceira pessoa. Seja objetivo e só explique detalhes quando forem necessários."},{role:"user",content:message}],temperature:.3,max_tokens:1200})});
     const j=await r.json();if(!r.ok)throw Error(j.error?.message||"HTTP "+r.status);
     const answer=j.choices?.[0]?.message?.content||"Não recebi uma resposta do modelo.";
     $("voiceTranscript").textContent="Você: "+phrase+"\n\nJarvis: "+answer;
