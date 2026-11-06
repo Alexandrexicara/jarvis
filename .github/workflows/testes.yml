@@ -1,0 +1,23 @@
+name: Testes do Jarvis
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, seguranca-dealwork]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+      - name: Executar testes
+        run: python -m unittest discover -s tests -v
