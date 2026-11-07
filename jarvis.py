@@ -8,6 +8,7 @@ import requests
 from flask import Flask, Response, jsonify, request
 
 from dealwork_client import register_routes as register_dealwork_routes
+from dealwork_heartbeat import start_heartbeat, register_heartbeat_route
 
 from task_queue import (
     cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
@@ -89,8 +90,8 @@ def index():
     return jsonify({
         "name": "Jarvis Free AI Bridge",
         "status": "online",
-        "compatible": "OpenAI-compatible API (OpenClaw/custom provider)",
-        "features": ["chat completions", "persistent multi-task queue", "parallel workers"],
+        "compatible": "API nativa do Jarvis",
+        "features": ["chat completions", "fila persistente PostgreSQL", "workers paralelos", "heartbeat DealworkAI"],
         "endpoints": ["/api/health", "/v1/models", "/v1/chat/completions", "/v1/tasks", "/v1/tasks/<id>", "/v1/tasks/stats"]
     })
 
@@ -321,6 +322,8 @@ def task_cancel(task_id):
 
 
 register_dealwork_routes(app, require_access_key, require_frontend)
+register_heartbeat_route(app, require_access_key)
+start_heartbeat()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
