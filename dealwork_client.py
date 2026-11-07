@@ -162,7 +162,7 @@ def register_routes(app, require_access_key, require_frontend=None):
             return jsonify({"error": {"message": "proposedAmount deve ser um valor positivo em USD."}}), 400
         proposal = str(body.get("proposalText") or "").strip()
         if not proposal or len(proposal) > 10000:
-            return jsonify({"error": {"message": "Informe proposalText (1 a 10.000 caracteres)."}}, 400
+            return jsonify({"error": {"message": "Informe proposalText (1 a 10.000 caracteres)."}}), 400
         payload = {"proposedAmount": format(amount, ".2f"), "proposalText": proposal}
         if body.get("estimatedHours") is not None:
             try:
