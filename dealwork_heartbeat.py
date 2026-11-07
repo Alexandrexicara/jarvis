@@ -35,7 +35,7 @@ def _current_skill_version():
     try:
         response = requests.get(SKILL_URL, timeout=(5, 15))
         response.raise_for_status()
-        match = re.search(r"(?m)^version:\\s*([0-9]+\\.[0-9]+\\.[0-9]+)\\s*$", response.text)
+        match = re.search(r"(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$", response.text)
         if match:
             return match.group(1)
     except requests.RequestException as exc:
