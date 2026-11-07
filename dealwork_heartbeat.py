@@ -1,7 +1,6 @@
 """Heartbeat oficial do agente Jarvis no DealworkAI.
 
-Prioriza Bearer API key (método recomendado pela documentação oficial).
-Mantém HMAC como fallback compatível. Não cria outro agente nem envia propostas.
+Tenta Bearer primeiro e, em caso de rejeição de autenticação, tenta HMAC.
 """
 import hashlib
 import hmac
@@ -43,20 +42,10 @@ def _current_skill_version():
     return FALLBACK_SKILL_VERSION
 
 
-def send_heartbeat():
-    if not AGENT_ID or not (API_KEY or HMAC_SECRET):
-        _status.update(configured=False, ok=False,
-                       last_error="DEALWORK_AGENT_ID e DEALWORK_AGENT_API_KEY (ou HMAC_SECRET) são necessários.")
-        return False
-
-    version = _current_skill_version()
-    payload = {"skillVersion": version}
-    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+def _headers(auth_method, body):
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-
-    if API_KEY:
+    if auth_method == "bearer":
         headers["Authorization"] = f"Bearer {API_KEY}"
-        auth_method = "bearer"
     else:
         timestamp = str(int(time.time()))
         signed = f"{AGENT_ID}{timestamp}{body}".encode("utf-8")
@@ -66,27 +55,50 @@ def send_heartbeat():
             "X-Timestamp": timestamp,
             "X-Signature": signature,
         })
-        auth_method = "hmac"
+    return headers
 
-    try:
-        response = requests.post(
-            f"{BASE_URL}/agents/{AGENT_ID}/heartbeat",
-            data=body.encode("utf-8"),
-            headers=headers,
-            timeout=(8, 25),
-        )
-        if not response.ok:
-            raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
-        _status.update(configured=True, auth_method=auth_method, ok=True,
-                       skill_version=version, last_success=int(time.time()), last_error=None)
-        logging.info("Jarvis Dealwork heartbeat confirmado via %s; skillVersion=%s",
-                     auth_method, version)
-        return True
-    except (requests.RequestException, RuntimeError) as exc:
-        _status.update(configured=True, auth_method=auth_method, ok=False,
-                       skill_version=version, last_error=str(exc)[:550])
-        logging.error("Jarvis Dealwork heartbeat falhou via %s: %s", auth_method, exc)
+
+def send_heartbeat():
+    if not AGENT_ID or not (API_KEY or HMAC_SECRET):
+        _status.update(configured=False, ok=False,
+                       last_error="DEALWORK_AGENT_ID e DEALWORK_AGENT_API_KEY (ou HMAC_SECRET) são necessários.")
         return False
+
+    version = _current_skill_version()
+    body = json.dumps({"skillVersion": version}, ensure_ascii=False, separators=(",", ":"))
+    methods = (["bearer", "hmac"] if API_KEY and HMAC_SECRET else
+               (["bearer"] if API_KEY else ["hmac"]))
+    errors = []
+
+    for auth_method in methods:
+        try:
+            response = requests.post(
+                f"{BASE_URL}/agents/{AGENT_ID}/heartbeat",
+                data=body.encode("utf-8"),
+                headers=_headers(auth_method, body),
+                timeout=(8, 25),
+            )
+            if response.ok:
+                _status.update(configured=True, auth_method=auth_method, ok=True,
+                               skill_version=version, last_success=int(time.time()), last_error=None)
+                logging.info("Jarvis Dealwork heartbeat confirmado via %s; skillVersion=%s",
+                             auth_method, version)
+                return True
+
+            error = f"HTTP {response.status_code}: {response.text[:350]}"
+            errors.append(f"{auth_method}: {error}")
+            # Só tenta o segundo método quando a autenticação foi rejeitada.
+            if response.status_code not in (401, 403):
+                break
+        except requests.RequestException as exc:
+            errors.append(f"{auth_method}: {exc}")
+            break
+
+    message = " | ".join(errors)
+    _status.update(configured=True, auth_method=methods[-1], ok=False,
+                   skill_version=version, last_error=message[:550])
+    logging.error("Jarvis Dealwork heartbeat falhou: %s", message)
+    return False
 
 
 def heartbeat_status():
