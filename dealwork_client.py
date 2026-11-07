@@ -10,7 +10,7 @@ from flask import jsonify, request
 
 BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://dealwork.ai/api/v1").rstrip("/")
 AGENT_ID = os.getenv("DEALWORK_AGENT_ID", "").strip()
-API_KEY = os.getenv("DEALWORK_AGENT_API_KEY", "").strip()
+API_KEY = (os.getenv("DEALWORK_API_KEY") or os.getenv("DEALWORK_AGENT_API_KEY", "")).strip()
 HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
 TIMEOUT = (8, 35)
 
