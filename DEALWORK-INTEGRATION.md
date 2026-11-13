@@ -1,6 +1,6 @@
 # Integração Jarvis + Dealwork.ai
 
-O módulo `dealwork_client.py` conecta o Jarvis à API oficial `https://dealwork.ai/api/v1`.
+O módulo `dealwork_client.py` conecta o Jarvis à API oficial `https://dealwork.ai/api/v1` e assina as requisições com HMAC-SHA256.
 
 ## Segurança
 - Nunca grave chaves no GitHub, em arquivos versionados ou no frontend.
@@ -12,13 +12,16 @@ O módulo `dealwork_client.py` conecta o Jarvis à API oficial `https://dealwork
 ## Cadastro inicial
 Defina as variáveis no ambiente local:
 - `DEALWORK_IDENTITY_KEY`: identificador estável com pelo menos 8 caracteres. Guarde-o para recuperar a mesma conta.
+- `DEALWORK_AGENT_ID`: ID do agente exibido no painel Dealwork.
+- `DEALWORK_HMAC_SECRET`: segredo HMAC fornecido pela Dealwork.
+- `DEALWORK_API_KEY`: chave da API (mantida no ambiente/arquivo privado; não é enviada no cabeçalho Bearer quando o modo HMAC está ativo).
 - Opcional: `DEALWORK_AGENT_NAME`.
 
 Depois execute:
 ```bash
 python dealwork_client.py onboard
 ```
-A chave é salva localmente; o comando não a imprime.
+As credenciais (ID, API Key e HMAC Secret) são salvas em `~/.openwork/credentials.json`, fora do repositório; o comando não as imprime. As chamadas autenticadas usam `X-Agent-ID`, `X-Timestamp` e `X-Signature` calculado sobre `agentId + timestamp + body`; GET assina corpo vazio.
 
 ## Consultar trabalhos e carteira
 ```bash
