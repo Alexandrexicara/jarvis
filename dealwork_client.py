@@ -7,8 +7,11 @@ como variável de ambiente ou o arquivo privado ~/.openwork/credentials.json.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -25,34 +28,53 @@ class DealworkError(RuntimeError):
 
 
 class DealworkClient:
-    def __init__(self, api_key: str | None = None, session: requests.Session | None = None):
-        self.api_key = (api_key or os.getenv("DEALWORK_API_KEY") or self._load_api_key()).strip()
-        if not self.api_key:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        agent_id: str | None = None,
+        hmac_secret: str | None = None,
+        session: requests.Session | None = None,
+    ):
+        credentials = self._load_credentials()
+        self.api_key = (
+            api_key or os.getenv("DEALWORK_API_KEY") or credentials.get("apiKey", "")
+        ).strip()
+        self.agent_id = (
+            agent_id or os.getenv("DEALWORK_AGENT_ID")
+            or credentials.get("agentAccountId", "")
+        ).strip()
+        self.hmac_secret = (
+            hmac_secret or os.getenv("DEALWORK_HMAC_SECRET")
+            or credentials.get("hmacSecret", "")
+        ).strip()
+        if not self.agent_id or not self.hmac_secret:
             raise DealworkError(
-                "Conta Dealwork ainda não conectada. Configure DEALWORK_API_KEY "
-                "ou execute: python dealwork_client.py onboard"
+                "Autenticação HMAC incompleta. Configure DEALWORK_AGENT_ID e "
+                "DEALWORK_HMAC_SECRET no ambiente ou salve as credenciais em "
+                f"{CREDENTIALS_PATH}. Não gere nem rotacione outra chave."
             )
         self.session = session or requests.Session()
         self.session.headers.update({
-            "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": "Jarvis-Dealwork-Agent/1.0",
         })
 
     @staticmethod
-    def _load_api_key() -> str:
+    def _load_credentials() -> dict[str, Any]:
         try:
             data = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
-            return str(data.get("apiKey", ""))
+            return data if isinstance(data, dict) else {}
         except (OSError, ValueError, TypeError):
-            return ""
+            return {}
 
     @staticmethod
     def save_credentials(data: dict[str, Any]) -> Path:
         api_key = data.get("apiKey")
-        if not api_key:
-            raise DealworkError("A resposta do cadastro não trouxe apiKey.")
+        if not api_key or not data.get("hmacSecret") or not data.get("agentAccountId"):
+            raise DealworkError(
+                "A resposta do cadastro precisa conter agentAccountId, apiKey e hmacSecret."
+            )
         CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
         CREDENTIALS_PATH.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n",
@@ -104,11 +126,30 @@ class DealworkClient:
         }
 
     def request(self, method: str, path: str, *, params=None, payload=None):
+        # A assinatura usa exatamente o corpo transmitido. GET sempre assina
+        # uma string vazia, conforme o contrato HMAC da Dealwork.
+        body = (
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            if payload is not None else ""
+        )
+        timestamp = str(int(time.time()))
+        signed_payload = f"{self.agent_id}{timestamp}{body}".encode("utf-8")
+        signature = hmac.new(
+            self.hmac_secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        headers = {
+            "X-Agent-ID": self.agent_id,
+            "X-Timestamp": timestamp,
+            "X-Signature": signature,
+        }
         response = self.session.request(
-            method,
+            method.upper(),
             f"{BASE_URL}/{path.lstrip('/')}",
             params=params,
-            json=payload,
+            data=body if body else None,
+            headers=headers,
             timeout=TIMEOUT,
         )
         return _decode_response(response)
