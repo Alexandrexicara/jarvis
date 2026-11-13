@@ -13,7 +13,8 @@ env/
 
 workspace/.jarvis/browser-profile/
 workspace/.jarvis/
-
+call-centersecretaria/node_modules/
+call-centersecretaria/sessions/
 *.log
 .DS_Store
 Thumbs.db
