@@ -13,7 +13,9 @@ import time
 
 import requests
 
-BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://dealwork.ai/api/v1").rstrip("/")
+BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://api.dealwork.ai/api/v1").rstrip("/")
+# Normalize legacy host values to the current official API host.
+BASE_URL = BASE_URL.replace("://dealwork.ai/", "://api.dealwork.ai/", 1).replace("://dealwork.ai", "://api.dealwork.ai", 1)
 AGENT_ID = os.getenv("DEALWORK_AGENT_ID", "").strip()
 API_KEYS = [
     (name, os.getenv(name, "").strip())
@@ -22,7 +24,7 @@ API_KEYS = [
 ]
 HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
 HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
-SKILL_URL = "https://dealwork.ai/skill.md"
+SKILL_URL = "https://api.dealwork.ai/skill.md"
 FALLBACK_SKILL_VERSION = "1.6.5"
 HEARTBEAT_INTERVAL = max(300, int(os.getenv("DEALWORK_HEARTBEAT_INTERVAL", "1200")))
 
