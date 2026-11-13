@@ -10,7 +10,12 @@ from flask import jsonify, request
 
 BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://dealwork.ai/api/v1").rstrip("/")
 AGENT_ID = os.getenv("DEALWORK_AGENT_ID", "").strip()
-API_KEY = (os.getenv("DEALWORK_API_KEY") or os.getenv("DEALWORK_AGENT_API_KEY", "")).strip()
+API_KEYS = [
+    (name, os.getenv(name, "").strip())
+    for name in ("DEALWORK_API_KEY", "DEALWORK_AGENT_API_KEY")
+    if os.getenv(name, "").strip()
+]
+HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
 HMAC_SECRET = os.getenv("DEALWORK_HMAC_SECRET", "").strip()
 TIMEOUT = (8, 35)
 
@@ -18,7 +23,7 @@ class DealworkError(RuntimeError):
     pass
 
 def _request(method, path, *, params=None, payload=None):
-    if not AGENT_ID or not (API_KEY or HMAC_SECRET):
+    if not AGENT_ID or not (API_KEYS or HMAC_SECRET):
         raise DealworkError("Configure DEALWORK_AGENT_ID e DEALWORK_AGENT_API_KEY ou DEALWORK_HMAC_SECRET no Render.")
     if not path.startswith("/") or ".." in path:
         raise DealworkError("Caminho Dealwork inválido.")
@@ -27,12 +32,12 @@ def _request(method, path, *, params=None, payload=None):
     if body:
         headers["Content-Type"] = "application/json"
 
-    auth_methods = ["bearer", "hmac"] if API_KEY and HMAC_SECRET else (["bearer"] if API_KEY else ["hmac"])
+    auth_methods = [("bearer", name, key) for name, key in API_KEYS] + ([("hmac", "DEALWORK_HMAC_SECRET", "")] if HMAC_SECRET else [])
     response = None
-    for auth_method in auth_methods:
+    for auth_method, credential_name, credential_value in auth_methods:
         request_headers = dict(headers)
         if auth_method == "bearer":
-            request_headers["Authorization"] = f"Bearer {API_KEY}"
+            request_headers["Authorization"] = f"Bearer {credential_value}"
         else:
             timestamp = str(int(time.time()))
             signed_payload = f"{AGENT_ID}{timestamp}{body}".encode("utf-8")
@@ -49,7 +54,7 @@ def _request(method, path, *, params=None, payload=None):
                 headers=request_headers, timeout=TIMEOUT)
         except requests.RequestException as exc:
             raise DealworkError(f"Falha de conexão com Dealwork: {exc}") from exc
-        if response.status_code not in (401, 403) or auth_method == auth_methods[-1]:
+        if response.status_code not in (401, 403) or (auth_method, credential_name, credential_value) == auth_methods[-1]:
             break
 
     try:
@@ -59,7 +64,7 @@ def _request(method, path, *, params=None, payload=None):
     if not response.ok:
         error = data.get("error", {}) if isinstance(data, dict) else {}
         message = error.get("message") or data.get("message") or f"HTTP {response.status_code}"
-        raise DealworkError(f"Dealwork HTTP {response.status_code}: {message}")
+        raise DealworkError(f"Dealwork HTTP {response.status_code} ({credential_name}): {message}")
     return data
 
 def register_routes(app, require_access_key, require_frontend=None):
@@ -108,7 +113,7 @@ def register_routes(app, require_access_key, require_frontend=None):
     @app.get("/v1/dealwork/status")
     @require_access_key
     def dealwork_status():
-        if not AGENT_ID or not (API_KEY or HMAC_SECRET):
+        if not AGENT_ID or not (API_KEYS or HMAC_SECRET):
             return jsonify({"connected": False, "agent_id": AGENT_ID or None,
                             "message": "Faltam as credenciais do Dealwork no Render."}), 503
         try:
