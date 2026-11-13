@@ -15,7 +15,11 @@ services:
         sync: false
       - key: NVIDIA_BASE_URL
         value: https://integrate.api.nvidia.com/v1
+      - key: DEALWORK_AGENT_ID
+        sync: false
       - key: DEALWORK_API_KEY
+        sync: false
+      - key: DEALWORK_HMAC_SECRET
         sync: false
       - key: DEALWORK_API_BASE
         value: https://dealwork.ai/api/v1
