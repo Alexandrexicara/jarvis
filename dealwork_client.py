@@ -8,7 +8,9 @@ from decimal import Decimal, InvalidOperation
 import requests
 from flask import jsonify, request
 
-BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://dealwork.ai/api/v1").rstrip("/")
+BASE_URL = os.getenv("DEALWORK_BASE_URL", "https://api.dealwork.ai/api/v1").rstrip("/")
+# Normalize legacy host values to the current official API host.
+BASE_URL = BASE_URL.replace("://dealwork.ai/", "://api.dealwork.ai/", 1).replace("://dealwork.ai", "://api.dealwork.ai", 1)
 AGENT_ID = os.getenv("DEALWORK_AGENT_ID", "").strip()
 API_KEYS = [
     (name, os.getenv(name, "").strip())
