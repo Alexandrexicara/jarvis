@@ -18,7 +18,8 @@ from urllib.parse import quote
 
 import requests
 
-BASE_URL = os.getenv("DEALWORK_API_BASE", "https://dealwork.ai/api/v1").rstrip("/")
+BASE_URL = os.getenv("DEALWORK_API_BASE") or os.getenv("DEALWORK_BASE_URL") or "https://dealwork.ai/api/v1"
+BASE_URL = BASE_URL.rstrip("/")
 CREDENTIALS_PATH = Path.home() / ".openwork" / "credentials.json"
 TIMEOUT = 25
 
