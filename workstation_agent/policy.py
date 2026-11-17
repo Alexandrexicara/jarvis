@@ -74,6 +74,10 @@ def run_approved_check(root: str | Path, check_name: str) -> dict:
     command = CHECKS.get(check_name)
     if command is None:
         raise PolicyError("Verificação não permitida.")
+    # No Windows, npm normalmente é um arquivo .cmd. Executamos somente
+    # a linha fixa previamente permitida; nunca interpolamos dados do pedido.
+    if os.name == "nt" and check_name in {"npm-build", "npm-lint"}:
+        command = ["cmd.exe", "/d", "/s", "/c", "npm run " + ("build" if check_name == "npm-build" else "lint")]
     safe_env = {
         key: value for key, value in os.environ.items()
         if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA", "PATHEXT"}
