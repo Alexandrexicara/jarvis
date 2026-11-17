@@ -1,0 +1,26 @@
+name: Jarvis workstation checks
+
+on:
+  push:
+    branches:
+      - feat/jarvis-windows-workstation
+  pull_request:
+    branches:
+      - feat/jarvis-windows-workstation
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest requests flask "psycopg[binary]"
+      - name: Compile Python modules
+        run: python -m compileall -q jarvis.py workstation_api.py workstation_queue.py workstation_agent tests
+      - name: Run workstation policy tests
+        run: python -m pytest -q tests/test_workstation_policy.py
