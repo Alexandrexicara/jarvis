@@ -41,6 +41,23 @@ class WorkspacePolicyTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(PolicyError):
                 resolve_workspace_path(self.root, name)
 
+    def test_blocks_symlink_that_points_outside_workspace(self):
+        outside = Path(self.temp.name).parent / (Path(self.temp.name).name + "-outside")
+        outside.mkdir(exist_ok=True)
+        try:
+            link = self.root / "outside-link"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Criação de symlink não disponível neste executor.")
+            with self.assertRaises(PolicyError):
+                resolve_workspace_path(self.root, "outside-link/secret.txt")
+        finally:
+            try:
+                outside.rmdir()
+            except OSError:
+                pass
+
     def test_rejects_unknown_commands(self):
         with self.assertRaises(PolicyError):
             run_approved_check(self.root, "powershell-arbitrary")
