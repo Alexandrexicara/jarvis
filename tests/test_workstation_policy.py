@@ -46,7 +46,7 @@ class WorkspacePolicyTests(unittest.TestCase):
             resolve_workspace_path(self.root, str(self.root / "file.txt"))
 
     def test_blocks_env_and_private_key_files(self):
-        for name in (".env", ".env.local", "private.pem", "id.key"):
+        for name in (".env", ".env.local", "private.pem", "id.key", ".jarvis-backups/backup.txt"):
             with self.subTest(name=name), self.assertRaises(PolicyError):
                 resolve_workspace_path(self.root, name)
 
