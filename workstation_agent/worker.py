@@ -1,6 +1,8 @@
-"""Worker Windows: conexão de saída HTTPS; sem shell remoto ou execução arbitrária."""
+"""Worker Windows: conexão HTTPS de saída, verificações fixas e reparo com backup."""
 import os
+import shutil
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -11,7 +13,6 @@ from workstation_agent.policy import (
     write_project_file, workspace_root, resolve_workspace_path,
 )
 
-# Lê apenas a configuração local do worker; não executa conteúdo do arquivo.
 _ENV_FILE = Path(__file__).with_name(".env")
 if _ENV_FILE.exists():
     for _line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
@@ -25,7 +26,8 @@ SERVER = os.getenv("JARVIS_SERVER_URL", "").rstrip("/")
 TOKEN = os.getenv("JARVIS_DEVICE_TOKEN", "").strip()
 WORKSPACE = os.getenv("JARVIS_WORKSPACE", "").strip()
 POLL_SECONDS = max(3, min(int(os.getenv("JARVIS_POLL_SECONDS", "5")), 60))
-VERIFY_TLS = True  # TLS não pode ser desativado pela configuração local.
+VERIFY_TLS = True
+BACKUP_DIR = ".jarvis-backups"
 
 
 def _headers():
@@ -35,7 +37,7 @@ def _headers():
 def _list_files(root, limit=300):
     base = workspace_root(root)
     found = []
-    ignored = {".git", ".venv", "venv", "__pycache__", "node_modules", ".env", "secrets"}
+    ignored = {".git", ".venv", "venv", "__pycache__", "node_modules", ".env", "secrets", "credentials", BACKUP_DIR}
     for current, dirs, files in os.walk(base, followlinks=False):
         dirs[:] = [d for d in dirs if d.lower() not in ignored and not (Path(current) / d).is_symlink()]
         for name in files:
@@ -50,6 +52,19 @@ def _list_files(root, limit=300):
     return found
 
 
+def _backup_file(root, relative_path):
+    base = workspace_root(root)
+    source = resolve_workspace_path(base, relative_path)
+    if not source.is_file():
+        return None
+    backup_root = base / BACKUP_DIR
+    backup_root.mkdir(exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    destination = backup_root / (timestamp + "__" + source.name)
+    shutil.copy2(source, destination)
+    return str(destination.relative_to(base))
+
+
 def _execute(job):
     operation = job.get("operation")
     payload = job.get("payload") or {}
@@ -58,13 +73,12 @@ def _execute(job):
     if operation == "read_file":
         return {"path": payload["path"], "content": read_project_file(WORKSPACE, payload["path"])}
     if operation == "write_file":
-        if not repair_may_run(0):
-            raise PolicyError(
-                "Autocorreção desativada. Habilite JARVIS_AUTO_REPAIR_ENABLED e autorize "
-                "as pastas em JARVIS_AUTO_EDIT_PATHS no .env local."
-            )
+        attempt = max(0, int(job.get("attempt", 1)) - 1)
+        if not repair_may_run(attempt):
+            raise PolicyError("Autocorreção desativada ou limite de tentativas atingido.")
+        backup = _backup_file(WORKSPACE, payload["path"])
         path = write_project_file(WORKSPACE, payload["path"], payload["content"])
-        return {"written": True, "path": path}
+        return {"written": True, "path": path, "backup": backup}
     if operation == "run_check":
         return run_approved_check(WORKSPACE, payload["check"])
     raise PolicyError("Operação desconhecida; bloqueada por segurança.")
