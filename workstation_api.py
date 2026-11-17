@@ -1,11 +1,11 @@
-"""Rotas autenticadas do braço Windows. Registrar em jarvis.py sem tocar nas rotas Dealwork."""
+"""Rotas autenticadas do braço Windows do Jarvis."""
 from functools import wraps
 
 from flask import jsonify, request
 
 from workstation_queue import (
-    authenticate_device, claim_job, create_device, enqueue_job,
-    finish_job, get_job, list_devices, revoke_device,
+    authenticate_device, claim_job, create_device, enqueue_job, finish_job,
+    get_job, list_devices, list_audit, revoke_device,
 )
 
 
@@ -41,6 +41,14 @@ def register_workstation_routes(app, require_access_key):
             return jsonify({"devices": list_devices()})
         except Exception:
             return unavailable("Falha ao listar workers Windows")
+
+    @app.get("/v1/workstation/audit")
+    @require_access_key
+    def workstation_audit():
+        try:
+            return jsonify({"events": list_audit(request.args.get("limit", 50))})
+        except Exception:
+            return unavailable("Falha ao consultar auditoria Windows")
 
     @app.delete("/v1/workstation/devices/<device_id>")
     @require_access_key
