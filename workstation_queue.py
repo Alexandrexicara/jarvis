@@ -145,3 +145,13 @@ def finish_job(device_id, job_id, result, failed=False):
             RETURNING id,status
         """, ("failed" if failed else "completed", json.dumps(result, ensure_ascii=False)[:100000], job_id, device_id)).fetchone()
     return dict(row) if row else None
+
+
+def get_job(device_id, job_id):
+    _init()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT id,device_id,operation,status,result,created_at,started_at,finished_at FROM jarvis_workstation_jobs WHERE id=%s AND device_id=%s",
+            (job_id, device_id),
+        ).fetchone()
+    return dict(row) if row else None
