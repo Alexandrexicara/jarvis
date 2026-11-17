@@ -1,5 +1,4 @@
 """Worker Windows: conexão de saída HTTPS; sem shell remoto ou execução arbitrária."""
-import json
 import os
 import time
 from pathlib import Path
@@ -8,8 +7,18 @@ import requests
 
 from workstation_agent.policy import (
     PolicyError, read_project_file, run_approved_check,
-    write_project_file, workspace_root,
+    write_project_file, workspace_root, resolve_workspace_path,
 )
+
+# Lê apenas a configuração local do worker; não executa conteúdo do arquivo.
+_ENV_FILE = Path(__file__).with_name(".env")
+if _ENV_FILE.exists():
+    for _line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _key, _value = _line.split("=", 1)
+        os.environ.setdefault(_key.strip(), _value.strip().strip('"').strip("'"))
 
 SERVER = os.getenv("JARVIS_SERVER_URL", "").rstrip("/")
 TOKEN = os.getenv("JARVIS_DEVICE_TOKEN", "").strip()
@@ -29,11 +38,8 @@ def _list_files(root, limit=300):
     for current, dirs, files in os.walk(base, followlinks=False):
         dirs[:] = [d for d in dirs if d.lower() not in ignored and not (Path(current) / d).is_symlink()]
         for name in files:
-            path = Path(current) / name
-            rel = path.relative_to(base).as_posix()
+            rel = (Path(current) / name).relative_to(base).as_posix()
             try:
-                # Same path policy blocks environment files, keys and protected folders.
-                from workstation_agent.policy import resolve_workspace_path
                 resolve_workspace_path(base, rel)
                 found.append(rel)
             except PolicyError:
@@ -69,10 +75,7 @@ def main():
     session = requests.Session()
     while True:
         try:
-            response = session.get(
-                f"{SERVER}/v1/workstation/poll",
-                headers=_headers(), timeout=(10, 30), verify=VERIFY_TLS,
-            )
+            response = session.get(f"{SERVER}/v1/workstation/poll", headers=_headers(), timeout=(10, 30), verify=VERIFY_TLS)
             response.raise_for_status()
             job = response.json().get("job")
             if not job:
@@ -86,8 +89,7 @@ def main():
                 failed = True
             posted = session.post(
                 f"{SERVER}/v1/workstation/jobs/{job['id']}/result",
-                headers=_headers(),
-                json={"result": result, "failed": failed},
+                headers=_headers(), json={"result": result, "failed": failed},
                 timeout=(10, 30), verify=VERIFY_TLS,
             )
             posted.raise_for_status()
