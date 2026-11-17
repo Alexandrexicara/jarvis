@@ -1,6 +1,8 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from workstation_agent.policy import (
     PolicyError,
@@ -9,6 +11,7 @@ from workstation_agent.policy import (
     run_approved_check,
     write_project_file,
 )
+from workstation_agent.autonomy import classify_action, max_repair_attempts, repair_may_run
 
 
 class WorkspacePolicyTests(unittest.TestCase):
@@ -19,9 +22,20 @@ class WorkspacePolicyTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_write_and_read_inside_workspace(self):
-        write_project_file(self.root, "src/example.txt", "olá")
-        self.assertEqual(read_project_file(self.root, "src/example.txt"), "olá")
+    def test_write_and_read_inside_explicitly_authorized_folder(self):
+        with patch.dict(os.environ, {"JARVIS_AUTO_EDIT_PATHS": "src"}):
+            write_project_file(self.root, "src/example.txt", "olá")
+            self.assertEqual(read_project_file(self.root, "src/example.txt"), "olá")
+
+    def test_write_is_blocked_by_default(self):
+        with patch.dict(os.environ, {"JARVIS_AUTO_EDIT_PATHS": ""}):
+            with self.assertRaises(PolicyError):
+                write_project_file(self.root, "src/example.txt", "não autorizado")
+
+    def test_write_is_blocked_outside_authorized_folder(self):
+        with patch.dict(os.environ, {"JARVIS_AUTO_EDIT_PATHS": "src"}):
+            with self.assertRaises(PolicyError):
+                write_project_file(self.root, "tests/example.txt", "não autorizado")
 
     def test_blocks_parent_traversal(self):
         with self.assertRaises(PolicyError):
@@ -61,6 +75,28 @@ class WorkspacePolicyTests(unittest.TestCase):
     def test_rejects_unknown_commands(self):
         with self.assertRaises(PolicyError):
             run_approved_check(self.root, "powershell-arbitrary")
+
+
+class AutonomyPolicyTests(unittest.TestCase):
+    def test_read_only_actions_are_automatic(self):
+        self.assertEqual(classify_action("run_check"), "auto")
+
+    def test_write_requires_local_restriction(self):
+        self.assertEqual(classify_action("write_file"), "restricted")
+
+    def test_production_and_secret_actions_need_approval(self):
+        self.assertEqual(classify_action("deploy"), "approval_required")
+        self.assertEqual(classify_action("manage_secrets"), "approval_required")
+
+    def test_repair_disabled_by_default(self):
+        with patch.dict(os.environ, {"JARVIS_AUTO_REPAIR_ENABLED": "false"}):
+            self.assertFalse(repair_may_run(0))
+
+    def test_repair_attempts_are_capped(self):
+        with patch.dict(os.environ, {"JARVIS_AUTO_REPAIR_ENABLED": "true", "JARVIS_AUTO_REPAIR_MAX_ATTEMPTS": "99"}):
+            self.assertEqual(max_repair_attempts(), 3)
+            self.assertTrue(repair_may_run(2))
+            self.assertFalse(repair_may_run(3))
 
 
 if __name__ == "__main__":
