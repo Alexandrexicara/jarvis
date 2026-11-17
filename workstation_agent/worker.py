@@ -5,6 +5,7 @@ from pathlib import Path
 
 import requests
 
+from workstation_agent.autonomy import repair_may_run
 from workstation_agent.policy import (
     PolicyError, read_project_file, run_approved_check,
     write_project_file, workspace_root, resolve_workspace_path,
@@ -57,6 +58,11 @@ def _execute(job):
     if operation == "read_file":
         return {"path": payload["path"], "content": read_project_file(WORKSPACE, payload["path"])}
     if operation == "write_file":
+        if not repair_may_run(0):
+            raise PolicyError(
+                "Autocorreção desativada. Habilite JARVIS_AUTO_REPAIR_ENABLED e autorize "
+                "as pastas em JARVIS_AUTO_EDIT_PATHS no .env local."
+            )
         path = write_project_file(WORKSPACE, payload["path"], payload["content"])
         return {"written": True, "path": path}
     if operation == "run_check":
