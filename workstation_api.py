@@ -5,7 +5,7 @@ from flask import jsonify, request
 
 from workstation_queue import (
     authenticate_device, claim_job, create_device, enqueue_job,
-    finish_job, list_devices, revoke_device,
+    finish_job, get_job, list_devices, revoke_device,
 )
 
 
@@ -62,6 +62,17 @@ def register_workstation_routes(app, require_access_key):
             return jsonify({"error": str(exc)}), 400
         except Exception as exc:
             app.logger.exception("Falha ao enfileirar tarefa Windows")
+            return jsonify({"error": str(exc)}), 503
+
+
+    @app.get("/v1/workstation/devices/<device_id>/jobs/<job_id>")
+    @require_access_key
+    def workstation_job_detail(device_id, job_id):
+        try:
+            job = get_job(device_id, job_id)
+            return (jsonify(job), 200) if job else (jsonify({"error": "Tarefa não encontrada."}), 404)
+        except Exception as exc:
+            app.logger.exception("Falha ao consultar tarefa Windows")
             return jsonify({"error": str(exc)}), 503
 
     @app.get("/v1/workstation/poll")
