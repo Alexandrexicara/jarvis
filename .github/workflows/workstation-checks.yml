@@ -1,6 +1,7 @@
 name: Jarvis workstation checks
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feat/jarvis-windows-workstation
@@ -8,12 +9,23 @@ on:
     branches:
       - feat/jarvis-windows-workstation
 
+permissions:
+  contents: read
+
+concurrency:
+  group: jarvis-workstation-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: Compile and test workstation policy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install test dependencies
