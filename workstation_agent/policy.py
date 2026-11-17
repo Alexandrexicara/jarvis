@@ -49,6 +49,25 @@ def resolve_workspace_path(root: str | Path, relative_path: str) -> Path:
     return target
 
 
+def _auto_edit_roots() -> tuple[str, ...]:
+    """Pastas relativas autorizadas explicitamente pelo operador na máquina Windows."""
+    raw = os.getenv("JARVIS_AUTO_EDIT_PATHS", "")
+    roots = []
+    for item in raw.split(","):
+        value = item.strip().replace("\\", "/").strip("/")
+        if not value or value.startswith("/") or ".." in value.split("/"):
+            continue
+        if any(part.lower() in BLOCKED_PARTS for part in value.split("/")):
+            continue
+        roots.append(value)
+    return tuple(roots)
+
+
+def _is_auto_edit_allowed(relative_path: str) -> bool:
+    normalized = relative_path.replace("\\", "/").strip("/")
+    return any(normalized == root or normalized.startswith(root + "/") for root in _auto_edit_roots())
+
+
 def read_project_file(root: str | Path, relative_path: str) -> str:
     target = resolve_workspace_path(root, relative_path)
     if not target.is_file():
@@ -60,12 +79,25 @@ def read_project_file(root: str | Path, relative_path: str) -> str:
 
 def write_project_file(root: str | Path, relative_path: str, content: str) -> str:
     target = resolve_workspace_path(root, relative_path)
+    if not _is_auto_edit_allowed(relative_path):
+        raise PolicyError(
+            "Edição automática bloqueada. Autorize a pasta em JARVIS_AUTO_EDIT_PATHS na máquina Windows."
+        )
     if not isinstance(content, str) or len(content.encode("utf-8")) > MAX_FILE_BYTES:
         raise PolicyError("Conteúdo inválido ou acima do limite de 1 MB.")
     target.parent.mkdir(parents=True, exist_ok=True)
     # Revalidar após criar diretórios para reduzir risco de symlink race.
     target = resolve_workspace_path(root, relative_path)
-    target.write_text(content, encoding="utf-8")
+    # Escrita atômica: evita deixar arquivo parcialmente gravado.
+    temporary = target.with_name(target.name + ".jarvis-tmp")
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        temporary.replace(target)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
     return str(target.relative_to(workspace_root(root)))
 
 
