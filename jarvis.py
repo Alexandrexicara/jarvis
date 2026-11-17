@@ -9,6 +9,7 @@ from flask import Flask, Response, jsonify, request
 
 from dealwork_client import register_routes as register_dealwork_routes
 from dealwork_heartbeat import start_heartbeat, register_heartbeat_route
+from workstation_api import register_workstation_routes
 
 from task_queue import (
     cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
@@ -323,6 +324,7 @@ def task_cancel(task_id):
 
 register_dealwork_routes(app, require_access_key, require_frontend)
 register_heartbeat_route(app, require_access_key)
+register_workstation_routes(app, require_access_key)
 start_heartbeat()
 
 if __name__ == "__main__":
