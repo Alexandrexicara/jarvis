@@ -10,7 +10,7 @@ import requests
 from workstation_agent.autonomy import repair_may_run
 from workstation_agent.policy import (
     PolicyError, read_project_file, run_approved_check,
-    write_project_file, workspace_root, resolve_workspace_path,
+    write_project_file, workspace_root, resolve_workspace_path, can_auto_edit,
 )
 
 _ENV_FILE = Path(__file__).with_name(".env")
@@ -76,6 +76,8 @@ def _execute(job):
         attempt = max(0, int(job.get("attempt", 1)) - 1)
         if not repair_may_run(attempt):
             raise PolicyError("Autocorreção desativada ou limite de tentativas atingido.")
+        if not can_auto_edit(payload["path"]):
+            raise PolicyError("Pasta não autorizada para autocorreção.")
         backup = _backup_file(WORKSPACE, payload["path"])
         path = write_project_file(WORKSPACE, payload["path"], payload["content"])
         return {"written": True, "path": path, "backup": backup}
