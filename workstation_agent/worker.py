@@ -24,7 +24,7 @@ SERVER = os.getenv("JARVIS_SERVER_URL", "").rstrip("/")
 TOKEN = os.getenv("JARVIS_DEVICE_TOKEN", "").strip()
 WORKSPACE = os.getenv("JARVIS_WORKSPACE", "").strip()
 POLL_SECONDS = max(3, min(int(os.getenv("JARVIS_POLL_SECONDS", "5")), 60))
-VERIFY_TLS = os.getenv("JARVIS_VERIFY_TLS", "true").lower() == "true"
+VERIFY_TLS = True  # TLS não pode ser desativado pela configuração local.
 
 
 def _headers():
