@@ -10,6 +10,7 @@ from flask import Flask, Response, jsonify, request
 from dealwork_client import register_routes as register_dealwork_routes
 from dealwork_heartbeat import start_heartbeat, register_heartbeat_route
 from workstation_api import register_workstation_routes
+from monitor_aviator_supervisor import start_monitor_aviator_supervisor, get_monitor_aviator_status
 
 from task_queue import (
     cancel_task, enqueue_tasks, get_task, get_tasks, get_tasks_paused, set_tasks_paused, start_workers, task_stats
@@ -79,6 +80,11 @@ def require_access_key(fn):
 
 @app.before_request
 def boot_task_workers():
+    # O supervisor é somente leitura e só inicia quando as duas variáveis próprias estiverem configuradas.
+    try:
+        start_monitor_aviator_supervisor()
+    except Exception:
+        app.logger.exception("Não foi possível iniciar o supervisor do Monitor Aviator")
     if request.path.startswith("/v1/tasks"):
         try:
             start_workers()
@@ -93,13 +99,19 @@ def index():
         "status": "online",
         "compatible": "API nativa do Jarvis",
         "features": ["chat completions", "fila persistente PostgreSQL", "workers paralelos", "heartbeat DealworkAI"],
-        "endpoints": ["/api/health", "/v1/models", "/v1/chat/completions", "/v1/tasks", "/v1/tasks/<id>", "/v1/tasks/stats"]
+        "endpoints": ["/api/health", "/v1/models", "/v1/chat/completions", "/v1/tasks", "/v1/tasks/<id>", "/v1/tasks/stats", "/v1/monitor-aviator/status"]
     })
 
 
 @app.get("/api/health")
 def health():
     return jsonify({"status": "ok", "service": "jarvis-free-ai-bridge"})
+
+
+@app.get("/v1/monitor-aviator/status")
+@require_access_key
+def monitor_aviator_status():
+    return jsonify(get_monitor_aviator_status())
 
 
 @app.get("/v1/models")
