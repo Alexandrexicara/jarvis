@@ -64,9 +64,11 @@ def _supervise():
             )
             response.raise_for_status()
             summary = response.json()
-            healthy = bool(summary.get("ok")) and summary.get("database") == "connected"
-            if summary.get("database") == "memory-demo":
-                healthy = False
+            healthy = (
+                bool(summary.get("ok"))
+                and summary.get("database") == "connected"
+                and bool(summary.get("collectorTokenConfigured"))
+            )
             status = "online" if healthy else "degraded"
             previous = _record_state(status, summary=summary)
             if previous != status:
